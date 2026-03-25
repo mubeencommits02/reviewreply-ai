@@ -86,10 +86,34 @@ const App = () => {
     }
   };
 
-  const handleCopy = (text, index) => {
-    navigator.clipboard.writeText(text);
-    setCopiedIndex(index);
-    setTimeout(() => setCopiedIndex(null), 2000);
+  const handleCopy = async (text, index) => {
+    try {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        await navigator.clipboard.writeText(text);
+        setCopiedIndex(index);
+        setTimeout(() => setCopiedIndex(null), 2000);
+      } else {
+        throw new Error('Clipboard API unavailable');
+      }
+    } catch (err) {
+      // Senior Dev Fallback: execCommand for older browsers or non-secure contexts
+      const textArea = document.createElement("textarea");
+      textArea.value = text;
+      textArea.style.position = "fixed";
+      textArea.style.left = "-999999px";
+      textArea.style.top = "-999999px";
+      document.body.appendChild(textArea);
+      textArea.focus();
+      textArea.select();
+      try {
+        document.execCommand('copy');
+        setCopiedIndex(index);
+        setTimeout(() => setCopiedIndex(null), 2000);
+      } catch (fallbackErr) {
+        console.error('Fallback copy failed', fallbackErr);
+      }
+      document.body.removeChild(textArea);
+    }
   };
 
   const handleWhatsappSubmit = (e) => {
@@ -390,23 +414,26 @@ const App = () => {
                         {reply.split(' ').length} words
                       </span>
                     </div>
-                    <p className="text-slate-700 leading-relaxed mb-6">
+                    <p className="text-slate-700 leading-relaxed pr-12">
                       {reply}
                     </p>
                     <button 
                       onClick={() => handleCopy(reply, idx)}
-                      className={`w-full py-3 rounded-xl font-bold text-sm flex items-center justify-center gap-2 transition-all ${
+                      className={`absolute bottom-4 right-4 p-2.5 rounded-xl transition-all flex items-center gap-2 group-hover:scale-105 active:scale-95 ${
                         copiedIndex === idx 
-                        ? 'bg-green-100 text-green-600' 
-                        : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-50'
+                        ? 'bg-green-100 text-green-600 border border-green-200' 
+                        : 'bg-white border border-slate-200 text-blue-600 hover:bg-blue-600 hover:text-white hover:border-blue-600 shadow-sm hover:shadow-lg shadow-blue-100'
                       }`}
                     >
                       {copiedIndex === idx ? (
-                        <>Copied! ✅</>
+                        <>
+                          <Check className="w-4 h-4" />
+                          <span className="text-xs font-bold">Copied!</span>
+                        </>
                       ) : (
                         <>
-                          <Copy className="w-4 h-4" />
-                          Copy Reply
+                          <Copy className="w-4 h-4 transition-transform group-hover:-rotate-12" />
+                          <span className="text-xs font-bold uppercase tracking-wider">Copy</span>
                         </>
                       )}
                     </button>
