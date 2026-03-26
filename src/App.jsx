@@ -13,10 +13,14 @@ import {
   ChevronDown, 
   ChevronUp, 
   Loader2,
-  Send
+  Send,
+  History,
+  TrendingUp,
+  Clock
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { generateReplies, analyzeReview } from './utils/gemini';
+import { supabase } from './utils/supabaseClient';
 
 const App = () => {
   const [activePage, setActivePage] = useState('landing');
@@ -29,25 +33,101 @@ const App = () => {
   const [error, setError] = useState('');
   const [copiedIndex, setCopiedIndex] = useState(null);
   
-  const [counter, setCounter] = useState(parseInt(localStorage.getItem('reply_counter')) || 127);
+  const [counter, setCounter] = useState(0);
   const [whatsappNumber, setWhatsappNumber] = useState('');
   const [whatsappSubmitted, setWhatsappSubmitted] = useState(false);
   const [sentiment, setSentiment] = useState(null);
+  const [recentReviews, setRecentReviews] = useState([]);
+  const [statsLoading, setStatsLoading] = useState(true);
 
   const toolRef = useRef(null);
 
   useEffect(() => {
-    localStorage.setItem('reply_counter', counter);
-  }, [counter]);
+    fetchCommunityStats();
+  }, []);
 
-  useEffect(() => {
-    if (reviewText.trim()) {
-      const result = analyzeReview(reviewText);
-      setSentiment(result);
-      setSelectedTone(result.suggestedTone);
-    } else {
-      setSentiment(null);
+  const fetchCommunityStats = async () => {
+    try {
+      setStatsLoading(true);
+      
+      // 1. Fetch total count
+      const { count, error: countError } = await supabase
+        .from('reviews_history')
+        .select('*', { count: 'exact', head: true });
+      
+      if (countError) {
+        console.error("Supabase Count Fetch Error:", countError.message);
+      } else {
+        setCounter(count || 0);
+      }
+
+      // 2. Fetch last 5 recent reviews
+      const { data: recent, error: recentError } = await supabase
+        .from('reviews_history')
+        .select('*')
+        .order('created_at', { ascending: false })
+        .limit(5);
+
+      if (recentError) {
+        console.error("Supabase History Fetch Error:", recentError.message);
+      } else {
+        setRecentReviews(recent || []);
+      }
+    } catch (err) {
+      console.error("Supabase Connection Failure:", err);
+    } finally {
+      setStatsLoading(false);
     }
+  };
+
+  const saveToSupabase = async (review, reply, tone, language) => {
+    try {
+      const { error } = await supabase
+        .from('reviews_history')
+        .insert([{ 
+          review_text: review, 
+          ai_reply: reply, 
+          tone, 
+          language 
+        }]);
+      
+      if (error) {
+        console.error("Supabase Save Failed:", error.message);
+        // Hint for user: Usually RLS Policy or Table Schema mismatch
+        return;
+      }
+      
+      // Success: locally optimistic update and sync
+      setCounter(prev => prev + 1);
+      setTimeout(fetchCommunityStats, 1000); 
+    } catch (err) {
+      console.error("Network/Supabase Error:", err);
+    }
+  };
+
+  // --- Senior Dev Addition: Sentiment Auto-Tone Detection ---
+  useEffect(() => {
+    if (!reviewText.trim()) {
+      setSentiment(null);
+      return;
+    }
+
+    const timer = setTimeout(async () => {
+      try {
+        const result = await analyzeReview(reviewText);
+        if (result) {
+          setSentiment(result);
+          // Auto-select tone based on AI sentiment analysis
+          if (result.suggestedTone) {
+            setSelectedTone(result.suggestedTone);
+          }
+        }
+      } catch (err) {
+        console.error("Auto-tone detect failed:", err);
+      }
+    }, 800); // 800ms debounce
+
+    return () => clearTimeout(timer);
   }, [reviewText]);
 
   const scrollToTool = () => {
@@ -73,14 +153,20 @@ const App = () => {
       const result = await generateReplies(reviewText, selectedTone, selectedLanguage);
       setReplies(result);
       setGeneratedLanguage(selectedLanguage);
-      setCounter(prev => prev + 1);
+      
+      // Save the first (best) reply to history
+      if (result && result.length > 0) {
+        // Run in background without blocking UI
+        saveToSupabase(reviewText, result[0], selectedTone, selectedLanguage);
+      }
+      
       // Scroll to results
       setTimeout(() => {
         document.getElementById('results-section')?.scrollIntoView({ behavior: 'smooth' });
       }, 100);
     } catch (err) {
       console.error("DEBUG ERROR:", err);
-      setError("Something went wrong — please try again ⏳");
+      setError("AI generation failed — check your internet connection ⏳");
     } finally {
       setIsLoading(false);
     }
@@ -124,23 +210,23 @@ const App = () => {
   };
 
   return (
-    <div className="min-h-screen bg-white text-gray-900 font-sans selection:bg-blue-100 selection:text-blue-700">
+    <div className="min-h-screen bg-slate-50 text-slate-900 font-sans selection:bg-blue-100 selection:text-blue-700">
       {/* Navigation / Logo Area */}
-      <header className="fixed top-0 left-0 right-0 bg-white/80 backdrop-blur-md z-50 border-b border-gray-100">
+      <header className="fixed top-0 left-0 right-0 bg-white/80 backdrop-blur-md z-50 border-b border-slate-100">
         <div className="max-w-6xl mx-auto px-4 h-16 flex items-center justify-between">
           <div className="flex items-center gap-2 cursor-pointer" onClick={() => setActivePage('landing')}>
-            <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center shadow-lg shadow-blue-200">
+            <div className="w-9 h-9 bg-blue-600 rounded-xl flex items-center justify-center shadow-lg shadow-blue-200">
               <Star className="text-white w-5 h-5 fill-current" />
             </div>
-            <span className="font-bold text-xl tracking-tight text-blue-600">ReviewReply AI</span>
+            <span className="font-bold text-xl tracking-tight text-slate-900">ReviewReply <span className="text-blue-600">AI</span></span>
           </div>
           <motion.button 
             whileHover={{ scale: 1.05 }}
             whileTap={{ scale: 0.95 }}
             onClick={scrollToTool}
-            className="bg-blue-600 text-white px-5 py-2 rounded-full font-semibold text-sm hover:bg-blue-700 transition-colors shadow-lg shadow-blue-200"
+            className="bg-blue-600 text-white px-6 py-2.5 rounded-full font-bold text-sm hover:bg-blue-700 transition-all shadow-xl shadow-blue-200"
           >
-            {activePage === 'landing' ? 'Try It Free' : 'Main Tool'}
+            {activePage === 'landing' ? 'Try It Free' : 'Launch Tool'}
           </motion.button>
         </div>
       </header>
@@ -174,13 +260,17 @@ const App = () => {
                   Try It Free Now <ArrowRight className="w-5 h-5" />
                 </motion.button>
                 
-                <div className="mt-12 flex items-center justify-center gap-2 text-gray-400 font-medium">
-                  <div className="flex -space-x-2">
-                    {[1,2,3,4].map(i => (
-                      <div key={i} className={`w-8 h-8 rounded-full border-2 border-white bg-gray-200`} />
-                    ))}
+                <div className="mt-16 grid grid-cols-2 max-w-xl mx-auto gap-6 px-4">
+                  <div className="bg-white p-8 rounded-[2rem] border border-slate-100 shadow-sm flex flex-col items-center gap-2 group hover:shadow-xl transition-all">
+                    <TrendingUp className="text-emerald-500 w-6 h-6 group-hover:scale-110 transition-transform" />
+                    <span className="text-4xl font-black text-slate-800 tracking-tighter">{statsLoading ? '...' : (counter > 0 ? counter : '0')}</span>
+                    <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-widest">Community Reviews</span>
                   </div>
-                  <span className="text-blue-600 font-bold ml-2">🎯 Replies Generated: {counter}</span>
+                  <div className="bg-white p-8 rounded-[2rem] border border-slate-100 shadow-sm flex flex-col items-center gap-2 group hover:shadow-xl transition-all">
+                    <Clock className="text-blue-500 w-6 h-6 group-hover:scale-110 transition-transform" />
+                    <span className="text-4xl font-black text-slate-800 tracking-tighter">{statsLoading ? '...' : (counter > 0 ? (counter * 2) : '0')} <span className="text-sm font-bold text-slate-400">m</span></span>
+                    <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-widest">Total Time Saved</span>
+                  </div>
                 </div>
               </motion.div>
             </section>
@@ -218,68 +308,72 @@ const App = () => {
             </div>
 
             {/* Step 1: Review Input */}
-            <div className="mb-8">
-              <div className="flex items-center justify-between mb-3">
+            <div className="mb-8 p-8 bg-white rounded-3xl border border-slate-100 shadow-sm">
+              <div className="flex items-center justify-between mb-4">
                 <div className="flex items-center gap-2">
-                  <span className="w-6 h-6 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center text-xs font-bold">1</span>
-                  <span className="font-semibold text-gray-700">The Review</span>
+                  <span className="w-7 h-7 rounded-full bg-blue-50 text-blue-600 flex items-center justify-center text-xs font-bold ring-4 ring-blue-50/50">1</span>
+                  <span className="font-bold text-slate-800">The Review</span>
                 </div>
                 <button 
                   onClick={handleSampleReview}
-                  className="text-xs font-semibold text-blue-600 hover:text-blue-700 px-3 py-1 bg-blue-50 rounded-full transition-colors"
+                  className="text-xs font-bold text-blue-600 hover:text-blue-700 px-4 py-1.5 bg-blue-50 rounded-full transition-all border border-blue-100 hover:border-blue-200"
                 >
                   Try a Sample Review
                 </button>
               </div>
-              <div className="relative">
+              <div className="relative group">
                 <textarea 
                   value={reviewText}
                   onChange={(e) => setReviewText(e.target.value)}
                   placeholder="Paste your customer's Google review here..."
-                  className="w-full h-40 px-5 py-4 bg-slate-50 border border-slate-100 rounded-2xl focus:ring-2 focus:ring-blue-500 bg-white shadow-sm outline-none resize-none transition-all placeholder:text-slate-400"
+                  className="w-full h-44 px-6 py-5 bg-slate-50 border border-slate-100 rounded-2xl focus:ring-4 focus:ring-blue-100 focus:border-blue-500 focus:bg-white shadow-sm outline-none resize-none transition-all placeholder:text-slate-400 text-slate-800 font-medium"
                 />
-                <div className="absolute bottom-4 right-4 text-xs text-slate-400 font-medium">
+                <div className="absolute bottom-4 right-4 text-[10px] text-slate-400 font-bold uppercase tracking-wider bg-white/50 backdrop-blur-sm px-2 py-1 rounded-md">
                   {reviewText.length} characters
                 </div>
               </div>
               {sentiment && (
-                <div className={`mt-3 px-4 py-2 rounded-xl inline-flex items-center gap-2 text-sm font-bold border ${
-                  sentiment.sentiment === 'negative' ? 'bg-red-50 text-red-600 border-red-100' :
-                  sentiment.sentiment === 'positive' ? 'bg-green-50 text-green-600 border-green-100' :
-                  'bg-blue-50 text-blue-600 border-blue-100'
-                }`}>
-                  <span>{sentiment.emoji}</span>
+                <motion.div 
+                  initial={{ opacity: 0, y: 5 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className={`mt-4 px-5 py-3 rounded-2xl inline-flex items-center gap-3 text-sm font-bold border-2 transition-all ${
+                    sentiment.sentiment === 'negative' ? 'bg-red-50 text-red-600 border-red-100 shadow-sm shadow-red-50' :
+                    sentiment.sentiment === 'positive' ? 'bg-emerald-50 text-emerald-600 border-emerald-100 shadow-sm shadow-emerald-50' :
+                    'bg-indigo-50 text-indigo-600 border-indigo-100 shadow-sm shadow-indigo-50'
+                  }`}
+                >
+                  <span className="text-xl animate-bounce">{sentiment.emoji}</span>
                   <span>
-                    {sentiment.sentiment.charAt(0).toUpperCase() + sentiment.sentiment.slice(1)} Review Detected — {sentiment.suggestedTone} tone recommended
+                    {sentiment.sentiment.charAt(0).toUpperCase() + sentiment.sentiment.slice(1)} Review detected — <span className="underline decoration-2 underline-offset-2">{sentiment.suggestedTone}</span> tone set automatically.
                   </span>
-                </div>
+                </motion.div>
               )}
             </div>
 
             {/* Step 2: Tone Selector */}
-            <div className="mb-10">
-              <div className="flex items-center gap-2 mb-3">
-                <span className="w-6 h-6 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center text-xs font-bold">2</span>
-                <span className="font-semibold text-gray-700">Choose Tone</span>
+            <div className="mb-8 p-8 bg-white rounded-3xl border border-slate-100 shadow-sm">
+              <div className="flex items-center gap-2 mb-5">
+                <span className="w-7 h-7 rounded-full bg-blue-50 text-blue-600 flex items-center justify-center text-xs font-bold ring-4 ring-blue-50/50">2</span>
+                <span className="font-bold text-slate-800">Select Reply Tone</span>
               </div>
-              <div className="grid grid-cols-3 gap-4">
+              <div className="grid grid-cols-3 gap-5">
                 <ToneCard 
                   id="Friendly"
-                  icon={<Smile className="w-5 h-5" />}
+                  icon={<Smile className="w-6 h-6" />}
                   label="Friendly"
                   isSelected={selectedTone === 'Friendly'}
                   onClick={() => setSelectedTone('Friendly')}
                 />
                 <ToneCard 
                   id="Professional"
-                  icon={<Briefcase className="w-5 h-5" />}
+                  icon={<Briefcase className="w-6 h-6" />}
                   label="Professional"
                   isSelected={selectedTone === 'Professional'}
                   onClick={() => setSelectedTone('Professional')}
                 />
                 <ToneCard 
                   id="Apologetic"
-                  icon={<Heart className="w-5 h-5 text-red-500" />}
+                  icon={<Heart className="w-6 h-6 text-red-500" />}
                   label="Apologetic"
                   isSelected={selectedTone === 'Apologetic'}
                   onClick={() => setSelectedTone('Apologetic')}
@@ -288,12 +382,13 @@ const App = () => {
             </div>
 
             {/* Step 3: Language Selector */}
-            <div className="mb-10">
-              <div className="flex items-center gap-2 mb-3">
-                <span className="w-6 h-6 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center text-xs font-bold">3</span>
-                <span className="font-semibold text-gray-700">Select Reply Language</span>
+            <div className="mb-10 p-8 bg-white rounded-3xl border border-slate-100 shadow-sm">
+              <div className="flex items-center gap-2 mb-5">
+                <span className="w-7 h-7 rounded-full bg-blue-50 text-blue-600 flex items-center justify-center text-xs font-bold ring-4 ring-blue-50/50">3</span>
+                <span className="font-bold text-slate-800">Select Reply Language</span>
               </div>
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+              
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
                 <LanguageCard 
                   id="English"
                   flag="🇬🇧"
@@ -324,36 +419,45 @@ const App = () => {
                 />
               </div>
 
+              {/* Multilingual Status - Senior Dev Polish */}
+              <div className="px-4 py-3 bg-indigo-50/50 rounded-2xl border border-indigo-100/50 mb-8 flex items-center gap-3">
+                <div className="w-2 h-2 rounded-full bg-indigo-500 animate-pulse" />
+                <span className="text-xs text-indigo-700 font-bold">Smart Language Intelligence: If you paste Urdu/Arabic/Hindi text, AI will handle it automatically.</span>
+              </div>
+
               {/* Coming Soon Section */}
-              <div className="p-6 bg-slate-50 rounded-2xl border border-slate-100">
-                <h4 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-4">More Languages Coming Soon!</h4>
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4 opacity-50 grayscale pointer-events-none">
-                  <div className="p-3 bg-white rounded-xl border border-slate-200 flex flex-col items-center">
-                    <span className="text-xl mb-1">🇪🇸</span>
-                    <span className="text-[10px] font-bold">Spanish</span>
+              <div className="p-10 bg-slate-50/50 rounded-3xl border border-slate-100/50 text-center">
+                <h4 className="text-[10px] font-extrabold text-slate-400 uppercase tracking-[0.2em] mb-8">Expanding Our Language Library</h4>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-10 opacity-40 grayscale pointer-events-none">
+                  <div className="p-4 bg-white rounded-2xl border border-slate-100 flex flex-col items-center gap-2">
+                    <span className="text-2xl">🇪🇸</span>
+                    <span className="text-[10px] font-extrabold">Spanish</span>
                   </div>
-                  <div className="p-3 bg-white rounded-xl border border-slate-200 flex flex-col items-center">
-                    <span className="text-xl mb-1">🇫🇷</span>
-                    <span className="text-[10px] font-bold">French</span>
+                  <div className="p-4 bg-white rounded-2xl border border-slate-100 flex flex-col items-center gap-2">
+                    <span className="text-2xl">🇫🇷</span>
+                    <span className="text-[10px] font-extrabold">French</span>
                   </div>
-                  <div className="p-3 bg-white rounded-xl border border-slate-200 flex flex-col items-center">
-                    <span className="text-xl mb-1">🇩🇪</span>
-                    <span className="text-[10px] font-bold">German</span>
+                  <div className="p-4 bg-white rounded-2xl border border-slate-100 flex flex-col items-center gap-2">
+                    <span className="text-2xl">🇩🇪</span>
+                    <span className="text-[10px] font-extrabold">German</span>
                   </div>
-                  <div className="p-3 bg-white rounded-xl border border-slate-200 flex flex-col items-center">
-                    <span className="text-xl mb-1">🇹🇷</span>
-                    <span className="text-[10px] font-bold">Turkish</span>
+                  <div className="p-4 bg-white rounded-2xl border border-slate-100 flex flex-col items-center gap-2">
+                    <span className="text-2xl">🇹🇷</span>
+                    <span className="text-[10px] font-extrabold">Turkish</span>
                   </div>
                 </div>
-                <div className="flex flex-col items-center">
-                  <span className="text-[11px] text-slate-400 font-medium mb-2">Vote for your language!</span>
-                  <div className="flex w-full max-w-xs gap-2">
+                <div className="flex flex-col items-center gap-4">
+                  <div className="flex flex-col gap-1">
+                    <span className="text-xs text-slate-500 font-bold uppercase tracking-wider">Vote for your language</span>
+                    <span className="text-[10px] text-slate-400">Join the waitlist for early access</span>
+                  </div>
+                  <div className="flex w-full max-w-sm gap-2 mt-2">
                     <input 
                       type="tel" 
-                      placeholder="WhatsApp number..."
-                      className="flex-1 px-3 py-2 text-xs bg-white border border-slate-200 rounded-lg outline-none"
+                      placeholder="WhatsApp (e.g. +92...)"
+                      className="flex-1 px-5 py-3 text-sm bg-white border border-slate-200 rounded-2xl outline-none focus:ring-4 focus:ring-blue-50 focus:border-blue-500 transition-all font-medium text-slate-700"
                     />
-                    <button className="bg-slate-200 text-slate-500 px-3 py-2 rounded-lg text-xs font-bold">Vote</button>
+                    <button className="bg-slate-900 text-white px-8 py-3 rounded-2xl text-sm font-bold hover:bg-slate-800 transition-all shadow-xl shadow-slate-200">Vote</button>
                   </div>
                 </div>
               </div>
@@ -391,54 +495,133 @@ const App = () => {
 
             {/* Step 5: Results Section */}
             {replies.length > 0 && (
-              <div id="results-section" className="space-y-6 pt-8 border-t border-slate-100">
-                <h3 className="text-xl font-bold text-slate-800">Your AI-Generated Replies</h3>
+              <div id="results-section" className="space-y-6 pt-12 mt-12 border-t border-slate-200">
+                <div className="flex items-center gap-3 mb-2">
+                  <div className="w-10 h-10 bg-emerald-100 rounded-full flex items-center justify-center shadow-sm shadow-emerald-50">
+                    <Check className="text-emerald-600 w-6 h-6" />
+                  </div>
+                  <h3 className="text-2xl font-bold text-slate-800 tracking-tight">AI-Generated Replies</h3>
+                </div>
                 {replies.map((reply, idx) => (
                   <motion.div 
-                    initial={{ opacity: 0, y: 10 }}
-                    animate={{ opacity: 1, y: 0 }}
+                    initial={{ opacity: 0, scale: 0.98 }}
+                    animate={{ opacity: 1, scale: 1 }}
                     transition={{ delay: idx * 0.1 }}
                     key={idx} 
-                    className="p-6 bg-slate-50 rounded-2xl border-2 border-transparent hover:border-blue-100 transition-all group relative"
+                    className="p-8 bg-white rounded-3xl border border-slate-100 hover:border-blue-100 hover:shadow-2xl hover:shadow-blue-50/50 transition-all group relative overflow-hidden"
                   >
-                    <div className="flex items-center justify-between mb-4">
-                      <div className="flex items-center gap-2">
-                        <span className="text-xs font-bold text-blue-600 bg-blue-50 px-3 py-1 rounded-full uppercase tracking-wider">
-                          Reply {idx + 1}
+                    <div className="flex items-center justify-between mb-6">
+                      <div className="flex items-center gap-3">
+                        <span className="text-[10px] font-extrabold text-blue-600 bg-blue-50 px-3 py-1.5 rounded-full uppercase tracking-[0.1em] border border-blue-100">
+                          Option {idx + 1}
                         </span>
-                        <div className="flex items-center gap-1 bg-slate-100 px-2 py-1 rounded-md">
-                          <span className="text-[10px] font-bold text-slate-500 uppercase">{generatedLanguage}</span>
+                        <div className="flex items-center gap-2 bg-slate-50 px-3 py-1.5 rounded-full border border-slate-100">
+                          <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">{generatedLanguage}</span>
                         </div>
                       </div>
-                      <span className="text-xs text-slate-400 font-medium">
-                        {reply.split(' ').length} words
+                      <span className="text-[10px] text-slate-400 font-bold uppercase tracking-widest font-mono">
+                        {reply.split(' ').length} WORDS
                       </span>
                     </div>
-                    <p className="text-slate-700 leading-relaxed pr-12">
+                    <p className="text-slate-700 leading-relaxed text-lg font-medium mb-12">
                       {reply}
                     </p>
-                    <button 
-                      onClick={() => handleCopy(reply, idx)}
-                      className={`absolute bottom-4 right-4 p-2.5 rounded-xl transition-all flex items-center gap-2 group-hover:scale-105 active:scale-95 ${
-                        copiedIndex === idx 
-                        ? 'bg-green-100 text-green-600 border border-green-200' 
-                        : 'bg-white border border-slate-200 text-blue-600 hover:bg-blue-600 hover:text-white hover:border-blue-600 shadow-sm hover:shadow-lg shadow-blue-100'
-                      }`}
-                    >
-                      {copiedIndex === idx ? (
-                        <>
-                          <Check className="w-4 h-4" />
-                          <span className="text-xs font-bold">Copied!</span>
-                        </>
-                      ) : (
-                        <>
-                          <Copy className="w-4 h-4 transition-transform group-hover:-rotate-12" />
-                          <span className="text-xs font-bold uppercase tracking-wider">Copy</span>
-                        </>
-                      )}
-                    </button>
+                    <div className="flex justify-end pt-2">
+                      <button 
+                        onClick={() => handleCopy(reply, idx)}
+                        className={`flex items-center gap-2.5 px-6 py-3 rounded-2xl transition-all font-bold text-sm tracking-tight ${
+                          copiedIndex === idx 
+                          ? 'bg-emerald-500 text-white shadow-lg shadow-emerald-200' 
+                          : 'bg-slate-900 text-white hover:bg-slate-800 shadow-xl shadow-slate-200 active:scale-95'
+                        }`}
+                      >
+                        {copiedIndex === idx ? (
+                          <>
+                            <Check className="w-4 h-4 stroke-[3px]" />
+                            <span>Copied!</span>
+                          </>
+                        ) : (
+                          <>
+                            <Copy className="w-4 h-4" />
+                            <span>Copy to Clipboard</span>
+                          </>
+                        )}
+                      </button>
+                    </div>
+                    
+                    {/* Subtle design element */}
+                    <div className="absolute top-0 right-0 w-24 h-24 bg-gradient-to-br from-blue-50 to-transparent opacity-50 -mr-12 -mt-12 rounded-full" />
                   </motion.div>
                 ))}
+              </div>
+            )}
+            {/* Recent Activity Section */}
+            {activePage === 'tool' && (
+              <div className="mt-24 pt-16 border-t border-slate-200">
+                <div className="flex items-center justify-between mb-8 group">
+                  <div className="flex items-center gap-3">
+                    <div className="w-12 h-12 bg-slate-900 rounded-2xl flex items-center justify-center shadow-lg shadow-slate-200 group-hover:rotate-12 transition-transform">
+                      <History className="text-white w-6 h-6" />
+                    </div>
+                    <div>
+                      <h3 className="text-2xl font-bold text-slate-800 tracking-tight">Recent Community Activity</h3>
+                      <p className="text-[10px] font-bold text-slate-400 uppercase tracking-[0.2em] mt-0.5">Auto-updating history log</p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2 text-[10px] font-bold text-emerald-600 bg-emerald-50 px-3 py-1.5 rounded-full border border-emerald-100">
+                    <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                    LIVE STATS
+                  </div>
+                </div>
+
+                {recentReviews.length > 0 ? (
+                  <div className="space-y-5">
+                    {recentReviews.map((item, idx) => (
+                      <motion.div 
+                        key={item.id}
+                        initial={{ opacity: 0, scale: 0.98 }}
+                        animate={{ opacity: 1, scale: 1 }}
+                        transition={{ delay: idx * 0.1 }}
+                        className="p-8 bg-white rounded-3xl border border-slate-100 shadow-sm flex items-center justify-between group hover:border-blue-100 hover:shadow-xl hover:shadow-blue-50/50 transition-all overflow-hidden relative"
+                      >
+                        <div className="flex-1 pr-10 text-left relative z-10">
+                          <p className="text-slate-700 font-medium leading-relaxed italic line-clamp-2">"{item.review_text}"</p>
+                          <div className="flex items-center gap-3 mt-4">
+                            <span className="text-[10px] font-extrabold text-blue-600 uppercase bg-blue-50 px-3 py-1 rounded-full border border-blue-100">
+                              {item.tone}
+                            </span>
+                            <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-[0.2em]">
+                              {item.language}
+                            </span>
+                          </div>
+                        </div>
+                        <button 
+                          onClick={() => handleCopy(item.ai_reply, `history-${idx}`)}
+                          className={`p-4 rounded-2xl transition-all shadow-md relative z-10 scale-95 hover:scale-100 active:scale-90 ${
+                            copiedIndex === `history-${idx}` 
+                            ? 'bg-emerald-500 text-white border-none' 
+                            : 'bg-white text-slate-400 border border-slate-200 hover:bg-slate-900 hover:text-white hover:border-slate-900'
+                          }`}
+                        >
+                          {copiedIndex === `history-${idx}` ? <Check className="w-5 h-5" /> : <Copy className="w-5 h-5" />}
+                        </button>
+                        
+                        {/* Apple-style glass decoration */}
+                        <div className="absolute top-0 right-0 w-32 h-32 bg-slate-50 rotate-45 translate-x-16 -translate-y-16 group-hover:bg-blue-50/30 transition-colors" />
+                      </motion.div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="p-16 bg-white rounded-3xl border-2 border-dashed border-slate-100 text-center flex flex-col items-center gap-4">
+                    <div className="w-16 h-16 bg-slate-50 rounded-full flex items-center justify-center">
+                      <History className="text-slate-300 w-8 h-8" />
+                    </div>
+                    <div>
+                      <h4 className="font-bold text-slate-800">No History Found Yet</h4>
+                      <p className="text-slate-400 text-sm mt-1 max-w-xs mx-auto">Generate the first review to start the community history log. Live data will sync automatically!</p>
+                    </div>
+                  </div>
+                )}
               </div>
             )}
           </div>
@@ -461,31 +644,32 @@ const App = () => {
               </p>
             </div>
 
-            <div className="bg-white p-8 rounded-3xl shadow-sm border border-slate-100 w-full max-w-md">
-              <h4 className="font-bold text-lg mb-4 text-center">Get updates & support on WhatsApp</h4>
+            <div className="bg-white p-10 rounded-[32px] shadow-sm border border-slate-100 w-full max-w-md ring-8 ring-slate-50">
+              <h4 className="font-extrabold text-xl mb-2 text-center text-slate-800 tracking-tight">Support on WhatsApp</h4>
+              <p className="text-slate-400 text-xs text-center mb-8 font-medium">Get instant updates & priority support</p>
               {whatsappSubmitted ? (
-                <div className="text-center py-4">
-                  <div className="w-12 h-12 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                    <Check className="text-green-600 w-6 h-6" />
+                <div className="text-center py-6">
+                  <div className="w-16 h-16 bg-emerald-50 rounded-full flex items-center justify-center mx-auto mb-6 shadow-sm shadow-emerald-50">
+                    <Check className="text-emerald-600 w-8 h-8" />
                   </div>
-                  <h5 className="font-bold text-slate-800">Thank You!</h5>
-                  <p className="text-slate-500 text-sm">We'll be in touch soon.</p>
+                  <h5 className="font-bold text-slate-800 text-lg">You're on the list!</h5>
+                  <p className="text-slate-400 text-sm mt-2">We'll be in touch soon.</p>
                 </div>
               ) : (
-                <form onSubmit={handleWhatsappSubmit} className="flex gap-2">
+                <form onSubmit={handleWhatsappSubmit} className="flex flex-col gap-3">
                   <input 
                     type="tel"
-                    placeholder="Enter your number..."
+                    placeholder="Enter WhatsApp number..."
                     value={whatsappNumber}
                     onChange={(e) => setWhatsappNumber(e.target.value)}
-                    className="flex-1 px-4 py-3 bg-slate-50 border border-slate-100 rounded-xl outline-none focus:ring-2 focus:ring-blue-500 transition-all"
+                    className="w-full px-5 py-4 bg-slate-50 border border-slate-100 rounded-2xl outline-none focus:ring-4 focus:ring-blue-50 focus:border-blue-500 transition-all font-medium text-slate-700"
                     required
                   />
                   <button 
                     type="submit"
-                    className="bg-blue-600 text-white px-6 py-3 rounded-xl font-bold hover:bg-blue-700 transition-all flex items-center gap-2"
+                    className="w-full bg-blue-600 text-white px-8 py-4 rounded-2xl font-bold hover:bg-blue-700 transition-all flex items-center justify-center gap-3 shadow-xl shadow-blue-200"
                   >
-                    <Send className="w-4 h-4" />
+                    Get Updates <Send className="w-4 h-4" />
                   </button>
                 </form>
               )}
@@ -516,28 +700,30 @@ const FeatureCard = ({ icon, title, description }) => (
 const ToneCard = ({ icon, label, isSelected, onClick }) => (
   <button 
     onClick={onClick}
-    className={`flex flex-col items-center justify-center gap-3 p-4 rounded-2xl border-2 transition-all ${
+    className={`flex flex-col items-center justify-center gap-3 p-6 rounded-3xl border-2 transition-all duration-300 ${
       isSelected 
-        ? 'border-blue-600 bg-blue-50 text-blue-600 shadow-md shadow-blue-100' 
-        : 'border-slate-100 bg-slate-50 text-slate-500 hover:bg-white hover:border-slate-200'
+        ? 'border-blue-600 bg-blue-50 text-blue-600 shadow-xl shadow-blue-100/50 scale-[1.02] ring-4 ring-blue-50/50' 
+        : 'border-slate-100 bg-slate-50 text-slate-400 hover:bg-white hover:border-slate-200 hover:text-slate-600 hover:shadow-md'
     }`}
   >
-    {icon}
-    <span className="font-bold text-xs uppercase tracking-wider">{label}</span>
+    <div className={`p-3 rounded-2xl transition-colors ${isSelected ? 'bg-blue-600 text-white' : 'bg-white text-slate-400 border border-slate-100'}`}>
+      {icon}
+    </div>
+    <span className="font-extrabold text-[10px] uppercase tracking-[0.2em]">{label}</span>
   </button>
 );
 
 const LanguageCard = ({ flag, label, isSelected, onClick }) => (
   <button 
     onClick={onClick}
-    className={`flex flex-col items-center justify-center gap-2 p-4 rounded-2xl border-2 transition-all ${
+    className={`flex flex-col items-center justify-center gap-3 p-6 rounded-3xl border-2 transition-all duration-300 ${
       isSelected 
-        ? 'border-blue-600 bg-blue-50 text-blue-600 shadow-md shadow-blue-100' 
-        : 'border-slate-100 bg-slate-50 text-slate-500 hover:bg-white hover:border-slate-200'
+        ? 'border-blue-600 bg-blue-50 text-blue-600 shadow-xl shadow-blue-100/50 scale-[1.02] ring-4 ring-blue-50/50' 
+        : 'border-slate-100 bg-slate-50 text-slate-400 hover:bg-white hover:border-slate-200 hover:text-slate-600 hover:shadow-md'
     }`}
   >
-    <span className="text-2xl">{flag}</span>
-    <span className="font-bold text-[10px] uppercase tracking-wider">{label}</span>
+    <span className="text-4xl drop-shadow-sm">{flag}</span>
+    <span className="font-extrabold text-[10px] uppercase tracking-[0.2em]">{label}</span>
   </button>
 );
 

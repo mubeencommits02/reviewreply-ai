@@ -1,29 +1,37 @@
 const API_KEY = import.meta.env.VITE_GROQ_API_KEY;
 
-const analyzeSentiment = (review) => {
-  const negative = ['bad', 'worst', 'terrible', 'horrible', 'awful', 'disappointed', 'slow', 'rude', 'never', 'poor', 'pathetic', 'waste', 'horrible', 'disgusting'];
-  const positive = ['great', 'excellent', 'amazing', 'wonderful', 'fantastic', 'loved', 'best', 'perfect', 'outstanding', 'brilliant', 'awesome'];
-  const text = review.toLowerCase();
-  let negScore = negative.filter(w => text.includes(w)).length;
-  let posScore = positive.filter(w => text.includes(w)).length;
-  if (negScore > posScore) return 'negative';
-  if (posScore > negScore) return 'positive';
-  return 'neutral';
-};
+export const analyzeReview = async (review) => {
+  if (!review || review.length < 5) return null;
+  
+  try {
+    const prompt = `Analyze this customer review and return ONLY a JSON object with: 
+    - "sentiment": "positive", "negative", or "neutral"
+    - "suggestedTone": "Friendly" (for positive), "Apologetic" (for negative), or "Professional" (for neutral)
+    - "emoji": single matching emoji
+    
+    Review: "${review}"`;
 
-const getTonesuggestion = (sentiment) => {
-  if (sentiment === 'negative') return 'Apologetic';
-  if (sentiment === 'positive') return 'Friendly';
-  return 'Professional';
-};
+    const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${API_KEY}`
+      },
+      body: JSON.stringify({
+        model: 'llama-3.1-8b-instant', // Fast model for real-time analysis
+        messages: [{ role: 'user', content: prompt }],
+        temperature: 0, // Deterministic
+        response_format: { type: "json_object" }
+      })
+    });
 
-export const analyzeReview = (review) => {
-  const sentiment = analyzeSentiment(review);
-  return {
-    sentiment,
-    suggestedTone: getTonesuggestion(sentiment),
-    emoji: sentiment === 'negative' ? '😤' : sentiment === 'positive' ? '😊' : '😐'
-  };
+    const data = await response.json();
+    return JSON.parse(data.choices[0].message.content);
+  } catch (err) {
+    console.error("AI Analysis Failed:", err);
+    // Simple fallback
+    return { sentiment: 'neutral', suggestedTone: 'Professional', emoji: '😐' };
+  }
 };
 
 export const generateReplies = async (review, tone, language) => {
