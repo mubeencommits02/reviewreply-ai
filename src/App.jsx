@@ -10,15 +10,13 @@ import {
   Heart, 
   Copy, 
   Check, 
-  ChevronDown, 
-  ChevronUp, 
   Loader2,
   Send,
   History,
   TrendingUp,
   Clock
 } from 'lucide-react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion } from 'framer-motion';
 import { generateReplies, analyzeReview } from './utils/gemini';
 import { supabase } from './utils/supabaseClient';
 
@@ -34,52 +32,34 @@ const App = () => {
   const [error, setError] = useState('');
   const [copiedIndex, setCopiedIndex] = useState(null);
   
-  const [counter, setCounter] = useState(0);
   const [whatsappNumber, setWhatsappNumber] = useState('');
   const [whatsappSubmitted, setWhatsappSubmitted] = useState(false);
   const [sentiment, setSentiment] = useState(null);
   const [recentReviews, setRecentReviews] = useState([]);
-  const [statsLoading, setStatsLoading] = useState(true);
 
   const toolRef = useRef(null);
 
   useEffect(() => {
-    fetchCommunityStats();
+    const fetchRecentReviews = async () => {
+      try {
+        const { data: recent, error: recentError } = await supabase
+          .from('reviews_history')
+          .select('*')
+          .order('created_at', { ascending: false })
+          .limit(5);
+
+        if (recentError) {
+          console.error("Supabase History Fetch Error:", recentError.message);
+        } else {
+          setRecentReviews(recent || []);
+        }
+      } catch (err) {
+        console.error("Supabase Connection Failure:", err);
+      }
+    };
+    
+    fetchRecentReviews();
   }, []);
-
-  const fetchCommunityStats = async () => {
-    try {
-      setStatsLoading(true);
-      
-      // 1. Fetch total count
-      const { count, error: countError } = await supabase
-        .from('reviews_history')
-        .select('*', { count: 'exact', head: true });
-      
-      if (countError) {
-        console.error("Supabase Count Fetch Error:", countError.message);
-      } else {
-        setCounter(count || 0);
-      }
-
-      // 2. Fetch last 5 recent reviews
-      const { data: recent, error: recentError } = await supabase
-        .from('reviews_history')
-        .select('*')
-        .order('created_at', { ascending: false })
-        .limit(5);
-
-      if (recentError) {
-        console.error("Supabase History Fetch Error:", recentError.message);
-      } else {
-        setRecentReviews(recent || []);
-      }
-    } catch (err) {
-      console.error("Supabase Connection Failure:", err);
-    } finally {
-      setStatsLoading(false);
-    }
-  };
 
   const saveToSupabase = async (review, reply, tone, language) => {
     try {
@@ -94,13 +74,8 @@ const App = () => {
       
       if (error) {
         console.error("Supabase Save Failed:", error.message);
-        // Hint for user: Usually RLS Policy or Table Schema mismatch
         return;
       }
-      
-      // Success: locally optimistic update and sync
-      setCounter(prev => prev + 1);
-      setTimeout(fetchCommunityStats, 1000); 
     } catch (err) {
       console.error("Network/Supabase Error:", err);
     }
@@ -129,7 +104,7 @@ const App = () => {
     }, 800); // 800ms debounce
 
     return () => clearTimeout(timer);
-  }, [reviewText]);
+  }, [reviewText, setSelectedTone]);
 
   const scrollToTool = () => {
     setActivePage('tool');
@@ -710,7 +685,7 @@ const ToneCard = ({ icon, label, isSelected, onClick }) => (
     <div className={`p-3 rounded-2xl transition-colors ${isSelected ? 'bg-blue-600 text-white' : 'bg-white text-slate-400 border border-slate-100'}`}>
       {icon}
     </div>
-    <span className="font-extrabold text-[9px] sm:text-[10px] uppercase tracking-[0.1em] sm:tracking-[0.2em]">{label}</span>
+    <span className="font-extrabold text-[9px] sm:text-[10px] uppercase tracking-widest sm:tracking-[0.2em]">{label}</span>
   </button>
 );
 
