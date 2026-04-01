@@ -22,6 +22,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { generateReplies, analyzeReview } from './utils/gemini';
 import { supabase } from './utils/supabaseClient';
 
+// Build trigger: 2026-04-01-17-14
 const App = () => {
   const [activePage, setActivePage] = useState('landing');
   const [reviewText, setReviewText] = useState("The food was amazing and the staff was very helpful. \nWill definitely come back again!");
