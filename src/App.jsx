@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { 
   Star, 
   Zap, 
@@ -59,7 +59,7 @@ const App = () => {
     };
     
     fetchRecentReviews();
-  }, []);
+  }, [supabase]);
 
   const saveToSupabase = async (review, reply, tone, language) => {
     try {
@@ -104,7 +104,7 @@ const App = () => {
     }, 800); // 800ms debounce
 
     return () => clearTimeout(timer);
-  }, [reviewText, setSelectedTone]);
+  }, [reviewText, setSelectedTone, setSentiment, analyzeReview]);
 
   const scrollToTool = () => {
     setActivePage('tool');
@@ -628,8 +628,8 @@ const App = () => {
                   <div className="w-16 h-16 bg-emerald-50 rounded-full flex items-center justify-center mx-auto mb-6 shadow-sm shadow-emerald-50">
                     <Check className="text-emerald-600 w-8 h-8" />
                   </div>
-                  <h5 className="font-bold text-slate-800 text-lg">You're on the list!</h5>
-                  <p className="text-slate-400 text-sm mt-2">We'll be in touch soon.</p>
+                  <h5 className="font-bold text-slate-800 text-lg">You&apos;re on the list!</h5>
+                  <p className="text-slate-400 text-sm mt-2">We&apos;ll be in touch soon.</p>
                 </div>
               ) : (
                 <form onSubmit={handleWhatsappSubmit} className="flex flex-col gap-3">
