@@ -24,7 +24,7 @@ import { supabase } from './utils/supabaseClient';
 
 const App = () => {
   const [activePage, setActivePage] = useState('landing');
-  const [reviewText, setReviewText] = useState('');
+  const [reviewText, setReviewText] = useState("The food was amazing and the staff was very helpful. \nWill definitely come back again!");
   const [selectedTone, setSelectedTone] = useState('Friendly');
   const [selectedLanguage, setSelectedLanguage] = useState('English');
   const [replies, setReplies] = useState([]);
@@ -263,13 +263,13 @@ const App = () => {
                 <div className="mt-16 grid grid-cols-2 max-w-xl mx-auto gap-6 px-4">
                   <div className="bg-white p-8 rounded-[2rem] border border-slate-100 shadow-sm flex flex-col items-center gap-2 group hover:shadow-xl transition-all">
                     <TrendingUp className="text-emerald-500 w-6 h-6 group-hover:scale-110 transition-transform" />
-                    <span className="text-4xl font-black text-slate-800 tracking-tighter">{statsLoading ? '...' : (counter > 0 ? counter : '0')}</span>
-                    <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-widest">Community Reviews</span>
+                    <span className="text-4xl font-black text-slate-800 tracking-tighter">500+</span>
+                    <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-widest">Replies Generated</span>
                   </div>
                   <div className="bg-white p-8 rounded-[2rem] border border-slate-100 shadow-sm flex flex-col items-center gap-2 group hover:shadow-xl transition-all">
                     <Clock className="text-blue-500 w-6 h-6 group-hover:scale-110 transition-transform" />
-                    <span className="text-4xl font-black text-slate-800 tracking-tighter">{statsLoading ? '...' : (counter > 0 ? (counter * 2) : '0')} <span className="text-sm font-bold text-slate-400">m</span></span>
-                    <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-widest">Total Time Saved</span>
+                    <span className="text-4xl font-black text-slate-800 tracking-tighter">250+ <span className="text-sm font-bold text-slate-400">Hours</span></span>
+                    <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-widest">Hours Saved</span>
                   </div>
                 </div>
               </motion.div>
@@ -356,7 +356,7 @@ const App = () => {
                 <span className="w-7 h-7 rounded-full bg-blue-50 text-blue-600 flex items-center justify-center text-xs font-bold ring-4 ring-blue-50/50">2</span>
                 <span className="font-bold text-slate-800">Select Reply Tone</span>
               </div>
-              <div className="grid grid-cols-3 gap-5">
+              <div className="flex flex-wrap sm:grid sm:grid-cols-3 gap-3 md:gap-5">
                 <ToneCard 
                   id="Friendly"
                   icon={<Smile className="w-6 h-6" />}
@@ -700,7 +700,7 @@ const FeatureCard = ({ icon, title, description }) => (
 const ToneCard = ({ icon, label, isSelected, onClick }) => (
   <button 
     onClick={onClick}
-    className={`flex flex-col items-center justify-center gap-3 p-6 rounded-3xl border-2 transition-all duration-300 ${
+    className={`flex-1 flex flex-col items-center justify-center gap-2 sm:gap-3 p-3 sm:p-6 rounded-3xl border-2 transition-all duration-300 ${
       isSelected 
         ? 'border-blue-600 bg-blue-50 text-blue-600 shadow-xl shadow-blue-100/50 scale-[1.02] ring-4 ring-blue-50/50' 
         : 'border-slate-100 bg-slate-50 text-slate-400 hover:bg-white hover:border-slate-200 hover:text-slate-600 hover:shadow-md'
@@ -709,7 +709,7 @@ const ToneCard = ({ icon, label, isSelected, onClick }) => (
     <div className={`p-3 rounded-2xl transition-colors ${isSelected ? 'bg-blue-600 text-white' : 'bg-white text-slate-400 border border-slate-100'}`}>
       {icon}
     </div>
-    <span className="font-extrabold text-[10px] uppercase tracking-[0.2em]">{label}</span>
+    <span className="font-extrabold text-[9px] sm:text-[10px] uppercase tracking-[0.1em] sm:tracking-[0.2em]">{label}</span>
   </button>
 );
 
