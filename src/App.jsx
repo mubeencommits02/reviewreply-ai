@@ -59,7 +59,7 @@ const App = () => {
     };
     
     fetchRecentReviews();
-  }, [supabase]);
+  }, []);
 
   const saveToSupabase = async (review, reply, tone, language) => {
     try {
@@ -104,7 +104,7 @@ const App = () => {
     }, 800); // 800ms debounce
 
     return () => clearTimeout(timer);
-  }, [reviewText, setSelectedTone, setSentiment, analyzeReview]);
+  }, [reviewText, setSelectedTone, setSentiment]);
 
   const scrollToTool = () => {
     setActivePage('tool');
@@ -157,7 +157,7 @@ const App = () => {
       } else {
         throw new Error('Clipboard API unavailable');
       }
-    } catch (err) {
+    } catch {
       // Senior Dev Fallback: execCommand for older browsers or non-secure contexts
       const textArea = document.createElement("textarea");
       textArea.value = text;
@@ -171,8 +171,8 @@ const App = () => {
         document.execCommand('copy');
         setCopiedIndex(index);
         setTimeout(() => setCopiedIndex(null), 2000);
-      } catch (fallbackErr) {
-        console.error('Fallback copy failed', fallbackErr);
+      } catch {
+        // Fallback copy failed
       }
       document.body.removeChild(textArea);
     }
@@ -334,21 +334,18 @@ const App = () => {
               </div>
               <div className="flex flex-wrap sm:grid sm:grid-cols-3 gap-3 md:gap-5">
                 <ToneCard 
-                  id="Friendly"
                   icon={<Smile className="w-6 h-6" />}
                   label="Friendly"
                   isSelected={selectedTone === 'Friendly'}
                   onClick={() => setSelectedTone('Friendly')}
                 />
                 <ToneCard 
-                  id="Professional"
                   icon={<Briefcase className="w-6 h-6" />}
                   label="Professional"
                   isSelected={selectedTone === 'Professional'}
                   onClick={() => setSelectedTone('Professional')}
                 />
                 <ToneCard 
-                  id="Apologetic"
                   icon={<Heart className="w-6 h-6 text-red-500" />}
                   label="Apologetic"
                   isSelected={selectedTone === 'Apologetic'}
@@ -366,28 +363,24 @@ const App = () => {
               
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
                 <LanguageCard 
-                  id="English"
                   flag="🇬🇧"
                   label="English"
                   isSelected={selectedLanguage === 'English'}
                   onClick={() => setSelectedLanguage('English')}
                 />
                 <LanguageCard 
-                  id="Arabic"
                   flag="🇸🇦"
                   label="Arabic"
                   isSelected={selectedLanguage === 'Arabic'}
                   onClick={() => setSelectedLanguage('Arabic')}
                 />
                 <LanguageCard 
-                  id="Urdu"
                   flag="🇵🇰"
                   label="Urdu"
                   isSelected={selectedLanguage === 'Urdu'}
                   onClick={() => setSelectedLanguage('Urdu')}
                 />
                 <LanguageCard 
-                  id="Hindi"
                   flag="🇮🇳"
                   label="Hindi"
                   isSelected={selectedLanguage === 'Hindi'}
