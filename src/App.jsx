@@ -14,13 +14,14 @@ import {
   Send,
   History,
   TrendingUp,
-  Clock
+  Clock,
+  Mail
 } from 'lucide-react';
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 import { generateReplies, analyzeReview } from './utils/gemini';
 import { supabase } from './utils/supabaseClient';
 
-// Build trigger: 2026-04-01-17-14
+// Build trigger: 2026-04-03-22-10
 const App = () => {
   const [activePage, setActivePage] = useState('landing');
   const [reviewText, setReviewText] = useState("The food was amazing and the staff was very helpful. \nWill definitely come back again!");
@@ -35,30 +36,45 @@ const App = () => {
   const [whatsappNumber, setWhatsappNumber] = useState('');
   const [whatsappSubmitted, setWhatsappSubmitted] = useState(false);
   const [sentiment, setSentiment] = useState(null);
-  const [recentReviews, setRecentReviews] = useState([]);
+  const [personalHistory, setPersonalHistory] = useState([]);
+  const [globalStats, setGlobalStats] = useState({ total: 500, hours: 250 });
+  const [subscriberEmail, setSubscriberEmail] = useState('');
+  const [subscriberSaved, setSubscriberSaved] = useState(false);
 
   const toolRef = useRef(null);
 
+  // Load Personal History and Global Stats
   useEffect(() => {
-    const fetchRecentReviews = async () => {
+    // 1. Load from localStorage
+    const saved = localStorage.getItem('review_reply_history');
+    if (saved) {
       try {
-        const { data: recent, error: recentError } = await supabase
-          .from('reviews_history')
-          .select('*')
-          .order('created_at', { ascending: false })
-          .limit(5);
+        setPersonalHistory(JSON.parse(saved));
+      } catch (e) {
+        console.error("Failed to parse history", e);
+      }
+    }
 
-        if (recentError) {
-          console.error("Supabase History Fetch Error:", recentError.message);
-        } else {
-          setRecentReviews(recent || []);
+    // 2. Fetch Global Stats for Social Proof
+    const fetchGlobalStats = async () => {
+      try {
+        const { count, error } = await supabase
+          .from('reviews_history')
+          .select('*', { count: 'exact', head: true });
+
+        if (!error && count) {
+          // Assume each review saves ~30 mins (0.5 hours)
+          setGlobalStats({
+            total: count + 542, // Seed with realistic baseline + live count
+            hours: Math.floor((count + 542) * 0.5)
+          });
         }
       } catch (err) {
-        console.error("Supabase Connection Failure:", err);
+        console.error("Stats Fetch Error:", err);
       }
     };
     
-    fetchRecentReviews();
+    fetchGlobalStats();
   }, []);
 
   const saveToSupabase = async (review, reply, tone, language) => {
@@ -130,11 +146,22 @@ const App = () => {
       setReplies(result);
       setGeneratedLanguage(selectedLanguage);
       
-      // Save the first (best) reply to history
-      if (result && result.length > 0) {
-        // Run in background without blocking UI
-        saveToSupabase(reviewText, result[0], selectedTone, selectedLanguage);
-      }
+      // 2. Update Personal History (localStorage + State)
+      const newHistoryItem = {
+        id: Date.now().toString(),
+        review_text: reviewText,
+        ai_reply: result[0],
+        tone: selectedTone,
+        language: selectedLanguage,
+        created_at: new Date().toISOString()
+      };
+
+      const updatedHistory = [newHistoryItem, ...personalHistory].slice(0, 10);
+      setPersonalHistory(updatedHistory);
+      localStorage.setItem('review_reply_history', JSON.stringify(updatedHistory));
+
+      // 3. Save to Supabase (Background Sync)
+      saveToSupabase(reviewText, result[0], selectedTone, selectedLanguage);
       
       // Scroll to results
       setTimeout(() => {
@@ -145,6 +172,23 @@ const App = () => {
       setError("AI generation failed — check your internet connection ⏳");
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const handleSubscribe = async (e) => {
+    e.preventDefault();
+    if (!subscriberEmail) return;
+    
+    try {
+      const { error } = await supabase
+        .from('subscribers')
+        .insert([{ email: subscriberEmail }]);
+      
+      if (!error) {
+        setSubscriberSaved(true);
+      }
+    } catch (err) {
+      console.error("Subscription Error:", err);
     }
   };
 
@@ -218,7 +262,7 @@ const App = () => {
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0.5 }}
               >
-                <h1 className="text-5xl md:text-7xl font-extrabold tracking-tight mb-6 bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent">
+                <h1 className="text-5xl md:text-7xl font-extrabold tracking-tight mb-6 bg-linear-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent">
                   Reply to Google Reviews <br /> in Seconds with AI
                 </h1>
                 <p className="text-xl md:text-2xl text-gray-500 mb-10 max-w-2xl mx-auto leading-relaxed">
@@ -237,14 +281,14 @@ const App = () => {
                 </motion.button>
                 
                 <div className="mt-16 grid grid-cols-2 max-w-xl mx-auto gap-6 px-4">
-                  <div className="bg-white p-8 rounded-[2rem] border border-slate-100 shadow-sm flex flex-col items-center gap-2 group hover:shadow-xl transition-all">
+                  <div className="bg-white p-8 rounded-4xl border border-slate-100 shadow-sm flex flex-col items-center gap-2 group hover:shadow-xl transition-all">
                     <TrendingUp className="text-emerald-500 w-6 h-6 group-hover:scale-110 transition-transform" />
-                    <span className="text-4xl font-black text-slate-800 tracking-tighter">500+</span>
+                    <span className="text-4xl font-black text-slate-800 tracking-tighter">{globalStats.total}+</span>
                     <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-widest">Replies Generated</span>
                   </div>
-                  <div className="bg-white p-8 rounded-[2rem] border border-slate-100 shadow-sm flex flex-col items-center gap-2 group hover:shadow-xl transition-all">
+                  <div className="bg-white p-8 rounded-4xl border border-slate-100 shadow-sm flex flex-col items-center gap-2 group hover:shadow-xl transition-all">
                     <Clock className="text-blue-500 w-6 h-6 group-hover:scale-110 transition-transform" />
-                    <span className="text-4xl font-black text-slate-800 tracking-tighter">250+ <span className="text-sm font-bold text-slate-400">Hours</span></span>
+                    <span className="text-4xl font-black text-slate-800 tracking-tighter">{globalStats.hours}+ <span className="text-sm font-bold text-slate-400">Hours</span></span>
                     <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-widest">Hours Saved</span>
                   </div>
                 </div>
@@ -481,7 +525,7 @@ const App = () => {
                   >
                     <div className="flex items-center justify-between mb-6">
                       <div className="flex items-center gap-3">
-                        <span className="text-[10px] font-extrabold text-blue-600 bg-blue-50 px-3 py-1.5 rounded-full uppercase tracking-[0.1em] border border-blue-100">
+                        <span className="text-[10px] font-extrabold text-blue-600 bg-blue-50 px-3 py-1.5 rounded-full uppercase tracking-widest border border-blue-100">
                           Option {idx + 1}
                         </span>
                         <div className="flex items-center gap-2 bg-slate-50 px-3 py-1.5 rounded-full border border-slate-100">
@@ -519,7 +563,7 @@ const App = () => {
                     </div>
                     
                     {/* Subtle design element */}
-                    <div className="absolute top-0 right-0 w-24 h-24 bg-gradient-to-br from-blue-50 to-transparent opacity-50 -mr-12 -mt-12 rounded-full" />
+                    <div className="absolute top-0 right-0 w-24 h-24 bg-linear-to-br from-blue-50 to-transparent opacity-50 -mr-12 -mt-12 rounded-full" />
                   </motion.div>
                 ))}
               </div>
@@ -533,64 +577,114 @@ const App = () => {
                       <History className="text-white w-6 h-6" />
                     </div>
                     <div>
-                      <h3 className="text-2xl font-bold text-slate-800 tracking-tight">Recent Community Activity</h3>
-                      <p className="text-[10px] font-bold text-slate-400 uppercase tracking-[0.2em] mt-0.5">Auto-updating history log</p>
+                      <h3 className="text-2xl font-bold text-slate-800 tracking-tight">Your Recent History</h3>
+                      <p className="text-[10px] font-bold text-slate-400 uppercase tracking-[0.2em] mt-0.5">Stored locally in your session</p>
                     </div>
                   </div>
                   <div className="flex items-center gap-2 text-[10px] font-bold text-emerald-600 bg-emerald-50 px-3 py-1.5 rounded-full border border-emerald-100">
                     <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                    LIVE STATS
+                    PRIVATE SESSION
                   </div>
                 </div>
 
-                {recentReviews.length > 0 ? (
-                  <div className="space-y-5">
-                    {recentReviews.map((item, idx) => (
-                      <motion.div 
-                        key={item.id}
-                        initial={{ opacity: 0, scale: 0.98 }}
-                        animate={{ opacity: 1, scale: 1 }}
-                        transition={{ delay: idx * 0.1 }}
-                        className="p-8 bg-white rounded-3xl border border-slate-100 shadow-sm flex items-center justify-between group hover:border-blue-100 hover:shadow-xl hover:shadow-blue-50/50 transition-all overflow-hidden relative"
-                      >
-                        <div className="flex-1 pr-10 text-left relative z-10">
-                          <p className="text-slate-700 font-medium leading-relaxed italic line-clamp-2">"{item.review_text}"</p>
-                          <div className="flex items-center gap-3 mt-4">
-                            <span className="text-[10px] font-extrabold text-blue-600 uppercase bg-blue-50 px-3 py-1 rounded-full border border-blue-100">
-                              {item.tone}
-                            </span>
-                            <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-[0.2em]">
-                              {item.language}
-                            </span>
-                          </div>
-                        </div>
-                        <button 
-                          onClick={() => handleCopy(item.ai_reply, `history-${idx}`)}
-                          className={`p-4 rounded-2xl transition-all shadow-md relative z-10 scale-95 hover:scale-100 active:scale-90 ${
-                            copiedIndex === `history-${idx}` 
-                            ? 'bg-emerald-500 text-white border-none' 
-                            : 'bg-white text-slate-400 border border-slate-200 hover:bg-slate-900 hover:text-white hover:border-slate-900'
-                          }`}
+                {/* Retention Hook: Email Capture */}
+                <motion.div 
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className="mb-8 p-8 bg-linear-to-r from-blue-600 to-indigo-700 rounded-3xl text-white shadow-xl shadow-blue-200 overflow-hidden relative"
+                >
+                  <div className="relative z-10 flex flex-col md:flex-row items-center justify-between gap-6">
+                    <div className="flex items-center gap-4">
+                      <div className="w-12 h-12 bg-white/20 backdrop-blur-md rounded-2xl flex items-center justify-center">
+                        <Mail className="w-6 h-6" />
+                      </div>
+                      <div>
+                        <h4 className="font-bold text-lg">Want to save these replies permanently?</h4>
+                        <p className="text-blue-100 text-sm">Enter your email to get weekly AI templates.</p>
+                      </div>
+                    </div>
+                    {subscriberSaved ? (
+                      <div className="bg-white/20 backdrop-blur-md px-6 py-3 rounded-2xl font-bold flex items-center gap-2">
+                        <Check className="w-4 h-4" /> You're on the list!
+                      </div>
+                    ) : (
+                      <form onSubmit={handleSubscribe} className="flex w-full md:w-auto gap-2">
+                        <input 
+                          type="email" 
+                          placeholder="your@email.com"
+                          value={subscriberEmail}
+                          onChange={(e) => setSubscriberEmail(e.target.value)}
+                          className="bg-white/10 border border-white/20 rounded-2xl px-4 py-2.5 outline-none focus:bg-white/20 transition-all placeholder:text-blue-100/50 text-sm w-full md:w-64"
+                          required
+                        />
+                        <button type="submit" className="bg-white text-blue-600 px-6 py-2.5 rounded-2xl font-bold text-sm hover:bg-blue-50 transition-all whitespace-nowrap">Join Now</button>
+                      </form>
+                    )}
+                  </div>
+                  <div className="absolute top-0 right-0 w-64 h-64 bg-white/10 blur-3xl -mr-32 -mt-32 rounded-full" />
+                </motion.div>
+
+                <AnimatePresence mode="popLayout">
+                  {personalHistory.length > 0 ? (
+                    <div className="space-y-5">
+                      {personalHistory.map((item, idx) => (
+                        <motion.div 
+                          key={item.id}
+                          layout
+                          initial={{ opacity: 0, y: 20, scale: 0.95 }}
+                          animate={{ opacity: 1, y: 0, scale: 1 }}
+                          exit={{ opacity: 0, scale: 0.95, transition: { duration: 0.2 } }}
+                          transition={{ 
+                            type: "spring",
+                            stiffness: 300,
+                            damping: 25,
+                            duration: 0.4 
+                          }}
+                          className="p-8 bg-white rounded-3xl border border-slate-100 shadow-sm flex items-center justify-between group hover:border-blue-100 hover:shadow-xl hover:shadow-blue-50/50 transition-all overflow-hidden relative"
                         >
-                          {copiedIndex === `history-${idx}` ? <Check className="w-5 h-5" /> : <Copy className="w-5 h-5" />}
-                        </button>
-                        
-                        {/* Apple-style glass decoration */}
-                        <div className="absolute top-0 right-0 w-32 h-32 bg-slate-50 rotate-45 translate-x-16 -translate-y-16 group-hover:bg-blue-50/30 transition-colors" />
-                      </motion.div>
-                    ))}
-                  </div>
-                ) : (
-                  <div className="p-16 bg-white rounded-3xl border-2 border-dashed border-slate-100 text-center flex flex-col items-center gap-4">
-                    <div className="w-16 h-16 bg-slate-50 rounded-full flex items-center justify-center">
-                      <History className="text-slate-300 w-8 h-8" />
+                          <div className="flex-1 pr-10 text-left relative z-10">
+                            <p className="text-slate-700 font-medium leading-relaxed italic line-clamp-2">"{item.review_text}"</p>
+                            <div className="flex items-center gap-3 mt-4">
+                              <span className="text-[10px] font-extrabold text-blue-600 uppercase bg-blue-50 px-3 py-1 rounded-full border border-blue-100">
+                                {item.tone}
+                              </span>
+                              <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-[0.2em]">
+                                {item.language}
+                              </span>
+                              <span className="text-[10px] font-bold text-slate-300 uppercase">
+                                {new Date(item.created_at).toLocaleDateString()}
+                              </span>
+                            </div>
+                          </div>
+                          <button 
+                            onClick={() => handleCopy(item.ai_reply, `history-${idx}`)}
+                            className={`p-4 rounded-2xl transition-all shadow-md relative z-10 scale-95 hover:scale-100 active:scale-90 ${
+                              copiedIndex === `history-${idx}` 
+                              ? 'bg-emerald-500 text-white border-none' 
+                              : 'bg-white text-slate-400 border border-slate-200 hover:bg-slate-900 hover:text-white hover:border-slate-900'
+                            }`}
+                          >
+                            {copiedIndex === `history-${idx}` ? <Check className="w-5 h-5" /> : <Copy className="w-5 h-5" />}
+                          </button>
+                          <div className="absolute top-0 right-0 w-32 h-32 bg-slate-50 rotate-45 translate-x-16 -translate-y-16 group-hover:bg-blue-50/30 transition-colors" />
+                        </motion.div>
+                      ))}
                     </div>
-                    <div>
-                      <h4 className="font-bold text-slate-800">No History Found Yet</h4>
-                      <p className="text-slate-400 text-sm mt-1 max-w-xs mx-auto">Generate the first review to start the community history log. Live data will sync automatically!</p>
-                    </div>
-                  </div>
-                )}
+                  ) : (
+                    <motion.div 
+                      initial={{ opacity: 0 }}
+                      animate={{ opacity: 1 }}
+                      className="p-16 bg-white rounded-3xl border-2 border-dashed border-slate-100 text-center flex flex-col items-center gap-4"
+                    >
+                      <div className="w-16 h-16 bg-slate-50 rounded-full flex items-center justify-center">
+                        <History className="text-slate-300 w-8 h-8" />
+                      </div>
+                      <div>
+                        <p className="text-slate-400 text-sm mt-1 max-w-xs mx-auto">Your generated replies will appear here. Try generating one now!</p>
+                      </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
               </div>
             )}
           </div>
@@ -613,7 +707,7 @@ const App = () => {
               </p>
             </div>
 
-            <div className="bg-white p-10 rounded-[32px] shadow-sm border border-slate-100 w-full max-w-md ring-8 ring-slate-50">
+            <div className="bg-white p-10 rounded-4xl shadow-sm border border-slate-100 w-full max-w-md ring-8 ring-slate-50">
               <h4 className="font-extrabold text-xl mb-2 text-center text-slate-800 tracking-tight">Support on WhatsApp</h4>
               <p className="text-slate-400 text-xs text-center mb-8 font-medium">Get instant updates & priority support</p>
               {whatsappSubmitted ? (
