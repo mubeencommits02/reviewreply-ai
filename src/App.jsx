@@ -17,7 +17,7 @@ import {
   Clock,
   Mail
 } from 'lucide-react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion as Motion, AnimatePresence } from 'framer-motion';
 import { generateReplies, analyzeReview } from './utils/gemini';
 import { supabase } from './utils/supabaseClient';
 
@@ -240,14 +240,14 @@ const App = () => {
             </div>
             <span className="font-bold text-xl tracking-tight text-slate-900">ReviewReply <span className="text-blue-600">AI</span></span>
           </div>
-          <motion.button 
+          <Motion.button 
             whileHover={{ scale: 1.05 }}
             whileTap={{ scale: 0.95 }}
             onClick={scrollToTool}
             className="bg-blue-600 text-white px-6 py-2.5 rounded-full font-bold text-sm hover:bg-blue-700 transition-all shadow-xl shadow-blue-200"
           >
             {activePage === 'landing' ? 'Try It Free' : 'Launch Tool'}
-          </motion.button>
+          </Motion.button>
         </div>
       </header>
 
@@ -257,7 +257,7 @@ const App = () => {
           <div className="max-w-6xl mx-auto px-4">
             {/* Hero Section */}
             <section className="text-center py-20 md:py-32">
-              <motion.div
+              <Motion.div
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0.5 }}
@@ -268,7 +268,7 @@ const App = () => {
                 <p className="text-xl md:text-2xl text-gray-500 mb-10 max-w-2xl mx-auto leading-relaxed">
                   Stop wasting 30 minutes daily writing review replies. <br className="hidden md:block" /> Let AI do it for free.
                 </p>
-                <motion.button
+                <Motion.button
                   whileHover={{ scale: 1.05 }}
                   whileTap={{ scale: 0.95 }}
                   onClick={() => {
@@ -278,7 +278,7 @@ const App = () => {
                   className="bg-blue-600 text-white px-8 py-4 rounded-2xl font-bold text-lg hover:bg-blue-700 transition-all shadow-xl shadow-blue-200 flex items-center gap-2 mx-auto"
                 >
                   Try It Free Now <ArrowRight className="w-5 h-5" />
-                </motion.button>
+                </Motion.button>
                 
                 <div className="mt-16 grid grid-cols-2 max-w-xl mx-auto gap-6 px-4">
                   <div className="bg-white p-8 rounded-4xl border border-slate-100 shadow-sm flex flex-col items-center gap-2 group hover:shadow-xl transition-all">
@@ -292,7 +292,7 @@ const App = () => {
                     <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-widest">Hours Saved</span>
                   </div>
                 </div>
-              </motion.div>
+              </Motion.div>
             </section>
 
             {/* Features Section */}
@@ -353,7 +353,7 @@ const App = () => {
                 </div>
               </div>
               {sentiment && (
-                <motion.div 
+                <Motion.div 
                   initial={{ opacity: 0, y: 5 }}
                   animate={{ opacity: 1, y: 0 }}
                   className={`mt-4 px-5 py-3 rounded-2xl inline-flex items-center gap-3 text-sm font-bold border-2 transition-all ${
@@ -366,7 +366,7 @@ const App = () => {
                   <span>
                     {sentiment.sentiment.charAt(0).toUpperCase() + sentiment.sentiment.slice(1)} Review detected — <span className="underline decoration-2 underline-offset-2">{sentiment.suggestedTone}</span> tone set automatically.
                   </span>
-                </motion.div>
+                </Motion.div>
               )}
             </div>
 
@@ -516,7 +516,7 @@ const App = () => {
                   <h3 className="text-2xl font-bold text-slate-800 tracking-tight">AI-Generated Replies</h3>
                 </div>
                 {replies.map((reply, idx) => (
-                  <motion.div 
+                  <Motion.div 
                     initial={{ opacity: 0, scale: 0.98 }}
                     animate={{ opacity: 1, scale: 1 }}
                     transition={{ delay: idx * 0.1 }}
@@ -564,7 +564,7 @@ const App = () => {
                     
                     {/* Subtle design element */}
                     <div className="absolute top-0 right-0 w-24 h-24 bg-linear-to-br from-blue-50 to-transparent opacity-50 -mr-12 -mt-12 rounded-full" />
-                  </motion.div>
+                  </Motion.div>
                 ))}
               </div>
             )}
@@ -588,7 +588,7 @@ const App = () => {
                 </div>
 
                 {/* Retention Hook: Email Capture */}
-                <motion.div 
+                <Motion.div 
                   initial={{ opacity: 0, y: 20 }}
                   animate={{ opacity: 1, y: 0 }}
                   className="mb-8 p-8 bg-linear-to-r from-blue-600 to-indigo-700 rounded-3xl text-white shadow-xl shadow-blue-200 overflow-hidden relative"
@@ -622,13 +622,13 @@ const App = () => {
                     )}
                   </div>
                   <div className="absolute top-0 right-0 w-64 h-64 bg-white/10 blur-3xl -mr-32 -mt-32 rounded-full" />
-                </motion.div>
+                </Motion.div>
 
                 <AnimatePresence mode="popLayout">
                   {personalHistory.length > 0 ? (
                     <div className="space-y-5">
                       {personalHistory.map((item, idx) => (
-                        <motion.div 
+                        <Motion.div 
                           key={item.id}
                           layout
                           initial={{ opacity: 0, y: 20, scale: 0.95 }}
@@ -667,11 +667,11 @@ const App = () => {
                             {copiedIndex === `history-${idx}` ? <Check className="w-5 h-5" /> : <Copy className="w-5 h-5" />}
                           </button>
                           <div className="absolute top-0 right-0 w-32 h-32 bg-slate-50 rotate-45 translate-x-16 -translate-y-16 group-hover:bg-blue-50/30 transition-colors" />
-                        </motion.div>
+                        </Motion.div>
                       ))}
                     </div>
                   ) : (
-                    <motion.div 
+                    <Motion.div 
                       initial={{ opacity: 0 }}
                       animate={{ opacity: 1 }}
                       className="p-16 bg-white rounded-3xl border-2 border-dashed border-slate-100 text-center flex flex-col items-center gap-4"
@@ -682,7 +682,7 @@ const App = () => {
                       <div>
                         <p className="text-slate-400 text-sm mt-1 max-w-xs mx-auto">Your generated replies will appear here. Try generating one now!</p>
                       </div>
-                    </motion.div>
+                    </Motion.div>
                   )}
                 </AnimatePresence>
               </div>
@@ -748,7 +748,7 @@ const App = () => {
 };
 
 const FeatureCard = ({ icon, title, description }) => (
-  <motion.div 
+  <Motion.div 
     whileHover={{ y: -5 }}
     className="bg-slate-50 p-8 rounded-3xl border border-slate-100 hover:shadow-xl hover:shadow-blue-50/50 transition-all"
   >
@@ -757,7 +757,7 @@ const FeatureCard = ({ icon, title, description }) => (
     </div>
     <h3 className="text-xl font-bold mb-3">{title}</h3>
     <p className="text-slate-500 leading-relaxed text-sm">{description}</p>
-  </motion.div>
+  </Motion.div>
 );
 
 const ToneCard = ({ icon, label, isSelected, onClick }) => (
