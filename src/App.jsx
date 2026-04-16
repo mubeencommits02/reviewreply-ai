@@ -15,7 +15,10 @@ import {
   History,
   TrendingUp,
   Clock,
-  Mail
+  Mail,
+  X,
+  Lock,
+  User
 } from 'lucide-react';
 import { motion as Motion, AnimatePresence } from 'framer-motion';
 import { generateReplies, analyzeReview } from './utils/gemini';
@@ -40,6 +43,26 @@ const App = () => {
   const [globalStats, setGlobalStats] = useState({ total: 500, hours: 250 });
   const [subscriberEmail, setSubscriberEmail] = useState('');
   const [subscriberSaved, setSubscriberSaved] = useState(false);
+  const [showToast, setShowToast] = useState(false);
+  const [toastMessage, setToastMessage] = useState('Copied to Clipboard! ✅');
+
+  // SaaS Auth & Profile States
+  const [user, setUser] = useState(null);
+  const [authModalOpen, setAuthModalOpen] = useState(false);
+  const [authMode, setAuthMode] = useState('signup');
+  const [authEmail, setAuthEmail] = useState('');
+  const [authPassword, setAuthPassword] = useState('');
+  const [generationCount, setGenerationCount] = useState(0);
+  const [userStats, setUserStats] = useState({ total: 0, thisMonth: 0 });
+
+  const [showSettings, setShowSettings] = useState(false);
+  const [businessProfile, setBusinessProfile] = useState({
+    business_name: '',
+    industry_type: '',
+    business_description: '',
+    preferred_tone: 'Professional'
+  });
+  const [isSavingProfile, setIsSavingProfile] = useState(false);
 
   const toolRef = useRef(null);
 
@@ -54,6 +77,30 @@ const App = () => {
         console.error("Failed to parse history", e);
       }
     }
+
+    const count = parseInt(localStorage.getItem('guest_gen_count') || '0', 10);
+    setGenerationCount(count);
+
+    // Initial session
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setUser(session?.user ?? null);
+      if (session?.user) {
+        fetchProfile(session.user.id);
+        fetchUserStats(session.user.id);
+      }
+    });
+
+    // Auth state listener
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      async (event, session) => {
+        setUser(session?.user ?? null);
+        if (session?.user) {
+          fetchProfile(session.user.id);
+          await syncHistoryOnLogin(session.user.id);
+          fetchUserStats(session.user.id);
+        }
+      }
+    );
 
     // 2. Fetch Global Stats for Social Proof
     const fetchGlobalStats = async () => {
@@ -75,18 +122,114 @@ const App = () => {
     };
     
     fetchGlobalStats();
+
+    return () => subscription.unsubscribe();
   }, []);
+
+  const fetchUserStats = async (userId) => {
+    try {
+      const { count, error } = await supabase
+        .from('reviews_history')
+        .select('*', { count: 'exact', head: true })
+        .eq('user_id', userId);
+
+      const startOfMonth = new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString();
+      const { count: monthCount } = await supabase
+        .from('reviews_history')
+        .select('*', { count: 'exact', head: true })
+        .eq('user_id', userId)
+        .gte('created_at', startOfMonth);
+
+      if (!error) {
+        setUserStats({
+          total: count || 0,
+          thisMonth: monthCount || 0
+        });
+        fetchPersonalHistory(userId);
+      }
+    } catch (err) {
+      console.error("User stats error:", err);
+    }
+  };
+
+  const fetchPersonalHistory = async (userId) => {
+    try {
+      const { data, error } = await supabase
+        .from('reviews_history')
+        .select('*')
+        .eq('user_id', userId)
+        .order('created_at', { ascending: false })
+        .limit(20);
+      
+      if (!error && data) {
+        setPersonalHistory(data);
+      }
+    } catch (err) {
+      console.error("History fetch error:", err);
+    }
+  };
+
+  const fetchProfile = async (userId) => {
+    try {
+      const { data, error } = await supabase
+        .from('business_profiles')
+        .select('*')
+        .eq('id', userId)
+        .single();
+      
+      if (!error && data) {
+        setBusinessProfile({
+          business_name: data.business_name || '',
+          industry_type: data.industry_type || '',
+          business_description: data.business_description || '',
+          preferred_tone: data.preferred_tone || 'Professional'
+        });
+        if (data.preferred_tone) {
+          setSelectedTone(data.preferred_tone);
+        }
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const syncHistoryOnLogin = async (userId) => {
+    if (localStorage.getItem('history_synced') === 'true') return;
+    
+    const saved = localStorage.getItem('review_reply_history');
+    if (saved) {
+      try {
+        const historyArr = JSON.parse(saved);
+        if (historyArr.length > 0) {
+          const formatted = historyArr.map(item => ({
+            user_id: userId,
+            review_text: item.review_text,
+            ai_reply: item.ai_reply,
+            tone: item.tone,
+            language: item.language
+          }));
+          const { error } = await supabase.from('reviews_history').insert(formatted);
+          if (!error) localStorage.setItem('history_synced', 'true');
+        }
+      } catch (err) {
+        console.error("Sync error:", err);
+      }
+    }
+  };
 
   const saveToSupabase = async (review, reply, tone, language) => {
     try {
+      const payload = { 
+        review_text: review, 
+        ai_reply: reply, 
+        tone, 
+        language 
+      };
+      if (user) payload.user_id = user.id;
+
       const { error } = await supabase
         .from('reviews_history')
-        .insert([{ 
-          review_text: review, 
-          ai_reply: reply, 
-          tone, 
-          language 
-        }]);
+        .insert([payload]);
       
       if (error) {
         console.error("Supabase Save Failed:", error.message);
@@ -139,12 +282,25 @@ const App = () => {
       return;
     }
 
+    if (!user && generationCount >= 3) {
+      setAuthMode('signup');
+      setAuthModalOpen(true);
+      return;
+    }
+
     setIsLoading(true);
     setError('');
     try {
-      const result = await generateReplies(reviewText, selectedTone, selectedLanguage);
+      const contextProfile = user && businessProfile.business_name ? businessProfile : null;
+      const result = await generateReplies(reviewText, selectedTone, selectedLanguage, contextProfile);
       setReplies(result);
       setGeneratedLanguage(selectedLanguage);
+      
+      if (!user) {
+        const newCount = generationCount + 1;
+        setGenerationCount(newCount);
+        localStorage.setItem('guest_gen_count', newCount.toString());
+      }
       
       // 2. Update Personal History (localStorage + State)
       const newHistoryItem = {
@@ -162,6 +318,9 @@ const App = () => {
 
       // 3. Save to Supabase (Background Sync)
       saveToSupabase(reviewText, result[0], selectedTone, selectedLanguage);
+      if (user) {
+        setTimeout(() => fetchUserStats(user.id), 1000);
+      }
       
       // Scroll to results
       setTimeout(() => {
@@ -173,6 +332,12 @@ const App = () => {
     } finally {
       setIsLoading(false);
     }
+  };
+
+  const handleReplyEdit = (index, newText) => {
+    const updatedReplies = [...replies];
+    updatedReplies[index] = newText;
+    setReplies(updatedReplies);
   };
 
   const handleSubscribe = async (e) => {
@@ -197,7 +362,12 @@ const App = () => {
       if (navigator.clipboard && navigator.clipboard.writeText) {
         await navigator.clipboard.writeText(text);
         setCopiedIndex(index);
-        setTimeout(() => setCopiedIndex(null), 2000);
+        setToastMessage('Copied to Clipboard! ✅');
+        setShowToast(true);
+        setTimeout(() => {
+          setCopiedIndex(null);
+          setShowToast(false);
+        }, 2000);
       } else {
         throw new Error('Clipboard API unavailable');
       }
@@ -214,7 +384,12 @@ const App = () => {
       try {
         document.execCommand('copy');
         setCopiedIndex(index);
-        setTimeout(() => setCopiedIndex(null), 2000);
+        setToastMessage('Copied to Clipboard! ✅');
+        setShowToast(true);
+        setTimeout(() => {
+          setCopiedIndex(null);
+          setShowToast(false);
+        }, 2000);
       } catch {
         // Fallback copy failed
       }
@@ -229,6 +404,68 @@ const App = () => {
     }
   };
 
+  const handleAuthSubmit = async (e) => {
+    e.preventDefault();
+    try {
+      let result;
+      if (authMode === 'signup') {
+        result = await supabase.auth.signUp({ email: authEmail, password: authPassword });
+      } else {
+        result = await supabase.auth.signInWithPassword({ email: authEmail, password: authPassword });
+      }
+      if (result.error) throw result.error;
+      
+      setAuthModalOpen(false);
+      setAuthEmail('');
+      setAuthPassword('');
+      setToastMessage("Logged in successfully! 🎉");
+      setShowToast(true);
+      setTimeout(() => setShowToast(false), 2000);
+    } catch(err) {
+      alert(err.message);
+    }
+  };
+
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
+    setBusinessProfile({ business_name: '', industry_type: '', business_description: '', preferred_tone: 'Professional' });
+    setGenerationCount(parseInt(localStorage.getItem('guest_gen_count') || '0', 10));
+    setToastMessage("Logged out securely.");
+    setShowToast(true);
+    setTimeout(() => setShowToast(false), 2000);
+  };
+
+  const handleSaveProfile = async (e) => {
+    e.preventDefault();
+    if (!user) return;
+    setIsSavingProfile(true);
+    try {
+      const { error } = await supabase
+        .from('business_profiles')
+        .upsert({ 
+          id: user.id, 
+          business_name: businessProfile.business_name,
+          industry_type: businessProfile.industry_type,
+          business_description: businessProfile.business_description,
+          preferred_tone: businessProfile.preferred_tone,
+          updated_at: new Date().toISOString()
+        });
+      
+      if (!error) {
+        setShowSettings(false);
+        setToastMessage("Business profile saved! 🚀");
+        setShowToast(true);
+        setTimeout(() => setShowToast(false), 2000);
+      } else {
+        throw error;
+      }
+    } catch(err) {
+      alert("Error saving profile: " + err.message);
+    } finally {
+      setIsSavingProfile(false);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900 font-sans selection:bg-blue-100 selection:text-blue-700">
       {/* Navigation / Logo Area */}
@@ -240,16 +477,52 @@ const App = () => {
             </div>
             <span className="font-bold text-xl tracking-tight text-slate-900">ReviewReply <span className="text-blue-600">AI</span></span>
           </div>
-          <Motion.button 
-            whileHover={{ scale: 1.05 }}
-            whileTap={{ scale: 0.95 }}
-            onClick={scrollToTool}
-            className="bg-blue-600 text-white px-6 py-2.5 rounded-full font-bold text-sm hover:bg-blue-700 transition-all shadow-xl shadow-blue-200"
-          >
-            {activePage === 'landing' ? 'Try It Free' : 'Launch Tool'}
-          </Motion.button>
+          <div className="flex items-center gap-4">
+            {user ? (
+              <>
+                <button onClick={() => setShowSettings(true)} className="flex items-center gap-2 text-slate-600 hover:text-blue-600 font-bold text-sm transition-colors">
+                  <Briefcase className="w-4 h-4" /> <span className="hidden sm:inline">Profile</span>
+                </button>
+                <button onClick={handleLogout} className="text-slate-400 hover:text-red-500 font-bold text-sm transition-colors">
+                  Logout
+                </button>
+              </>
+            ) : (
+              <button 
+                onClick={() => { setAuthMode('login'); setAuthModalOpen(true); }} 
+                className="text-slate-600 hover:text-blue-600 font-bold text-sm transition-colors"
+              >
+                Sign In
+              </button>
+            )}
+            <Motion.button 
+              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 0.95 }}
+              onClick={scrollToTool}
+              className="bg-blue-600 text-white px-6 py-2.5 rounded-full font-bold text-sm hover:bg-blue-700 transition-all shadow-xl shadow-blue-200"
+            >
+              {activePage === 'landing' ? 'Try It Free' : 'Launch Tool'}
+            </Motion.button>
+          </div>
         </div>
       </header>
+
+      {/* Toast Notification */}
+      <AnimatePresence>
+        {showToast && (
+          <Motion.div 
+            initial={{ opacity: 0, y: -20, x: '-50%' }}
+            animate={{ opacity: 1, y: 80, x: '-50%' }}
+            exit={{ opacity: 0, y: -20, x: '-50%' }}
+            className="fixed top-0 left-1/2 z-[60] bg-slate-900 text-white px-6 py-3 rounded-2xl shadow-2xl flex items-center gap-2 border border-slate-800"
+          >
+            <div className="w-6 h-6 bg-emerald-500 rounded-full flex items-center justify-center">
+              <Check className="w-4 h-4 text-white stroke-[3px]" />
+            </div>
+            <span className="font-bold text-sm tracking-tight">{toastMessage}</span>
+          </Motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Main Content */}
       <main className="pt-24 pb-12">
@@ -490,7 +763,7 @@ const App = () => {
                 {isLoading ? (
                   <>
                     <Loader2 className="w-6 h-6 animate-spin" />
-                    AI is writing your replies...
+                    Generating...
                   </>
                 ) : (
                   <>
@@ -499,6 +772,20 @@ const App = () => {
                 )}
               </button>
               
+              {isLoading && (
+                <Motion.p 
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  className="mt-4 text-center text-blue-600 font-bold text-sm flex items-center justify-center gap-2"
+                >
+                  <span className="flex h-2 w-2 relative">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75"></span>
+                    <span className="relative inline-flex rounded-full h-2 w-2 bg-blue-500"></span>
+                  </span>
+                  AI is analyzing customer sentiment and crafting your response...
+                </Motion.p>
+              )}
+              
               {error && (
                 <p className="mt-4 text-center text-red-500 font-medium">
                   {error}
@@ -506,71 +793,159 @@ const App = () => {
               )}
             </div>
 
-            {/* Step 5: Results Section */}
-            {replies.length > 0 && (
-              <div id="results-section" className="space-y-6 pt-12 mt-12 border-t border-slate-200">
-                <div className="flex items-center gap-3 mb-2">
-                  <div className="w-10 h-10 bg-emerald-100 rounded-full flex items-center justify-center shadow-sm shadow-emerald-50">
-                    <Check className="text-emerald-600 w-6 h-6" />
+            {/* Step 5: Results Section (Skeleton or Content) */}
+            <AnimatePresence mode="wait">
+              {isLoading ? (
+                <Motion.div 
+                  key="skeleton"
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  className="space-y-6 pt-12 mt-12 border-t border-slate-200"
+                >
+                  <div className="flex items-center gap-3 mb-2">
+                    <div className="w-10 h-10 bg-slate-100 rounded-full animate-pulse" />
+                    <div className="h-8 w-48 bg-slate-100 rounded-lg animate-pulse" />
                   </div>
-                  <h3 className="text-2xl font-bold text-slate-800 tracking-tight">AI-Generated Replies</h3>
-                </div>
-                {replies.map((reply, idx) => (
-                  <Motion.div 
-                    initial={{ opacity: 0, scale: 0.98 }}
-                    animate={{ opacity: 1, scale: 1 }}
-                    transition={{ delay: idx * 0.1 }}
-                    key={idx} 
-                    className="p-8 bg-white rounded-3xl border border-slate-100 hover:border-blue-100 hover:shadow-2xl hover:shadow-blue-50/50 transition-all group relative overflow-hidden"
-                  >
-                    <div className="flex items-center justify-between mb-6">
-                      <div className="flex items-center gap-3">
-                        <span className="text-[10px] font-extrabold text-blue-600 bg-blue-50 px-3 py-1.5 rounded-full uppercase tracking-widest border border-blue-100">
-                          Option {idx + 1}
-                        </span>
-                        <div className="flex items-center gap-2 bg-slate-50 px-3 py-1.5 rounded-full border border-slate-100">
-                          <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">{generatedLanguage}</span>
+                  {[1, 2, 3].map((i) => (
+                    <div key={i} className="p-8 bg-white rounded-3xl border border-slate-100 space-y-4">
+                      <div className="flex justify-between items-center">
+                        <div className="h-6 w-24 bg-slate-50 rounded-full animate-pulse" />
+                        <div className="h-4 w-16 bg-slate-50 rounded-full animate-pulse" />
+                      </div>
+                      <div className="space-y-2">
+                        <div className="h-4 w-full bg-slate-50 rounded animate-pulse" />
+                        <div className="h-4 w-5/6 bg-slate-50 rounded animate-pulse" />
+                        <div className="h-4 w-4/6 bg-slate-50 rounded animate-pulse" />
+                      </div>
+                      <div className="flex justify-end pt-4">
+                        <div className="h-10 w-40 bg-slate-100 rounded-2xl animate-pulse" />
+                      </div>
+                    </div>
+                  ))}
+                </Motion.div>
+              ) : replies.length > 0 ? (
+                <Motion.div 
+                  key="results"
+                  id="results-section"
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className="space-y-6 pt-12 mt-12 border-t border-slate-200"
+                >
+                  <div className="flex items-center gap-3 mb-2">
+                    <div className="w-10 h-10 bg-emerald-100 rounded-full flex items-center justify-center shadow-sm shadow-emerald-50">
+                      <Check className="text-emerald-600 w-6 h-6" />
+                    </div>
+                    <h3 className="text-2xl font-bold text-slate-800 tracking-tight">AI-Generated Replies</h3>
+                  </div>
+                  {replies.map((reply, idx) => (
+                    <Motion.div 
+                      initial={{ opacity: 0, scale: 0.98 }}
+                      animate={{ opacity: 1, scale: 1 }}
+                      transition={{ delay: idx * 0.1 }}
+                      key={idx} 
+                      className="p-8 bg-white rounded-3xl border border-slate-100 hover:border-blue-100 hover:shadow-2xl hover:shadow-blue-50/50 transition-all group relative overflow-hidden"
+                    >
+                      <div className="flex items-center justify-between mb-6">
+                        <div className="flex items-center gap-3">
+                          <span className="text-[10px] font-extrabold text-blue-600 bg-blue-50 px-3 py-1.5 rounded-full uppercase tracking-widest border border-blue-100">
+                            Option {idx + 1}
+                          </span>
+                          <div className="flex items-center gap-2 bg-slate-50 px-3 py-1.5 rounded-full border border-slate-100">
+                            <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">{generatedLanguage}</span>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <span className="text-[10px] text-blue-400 font-bold uppercase tracking-widest italic animate-pulse">Magic Edit Active ✨</span>
+                          <span className="text-[10px] text-slate-400 font-bold uppercase tracking-widest font-mono">
+                            {reply.split(' ').length} WORDS
+                          </span>
                         </div>
                       </div>
-                      <span className="text-[10px] text-slate-400 font-bold uppercase tracking-widest font-mono">
-                        {reply.split(' ').length} WORDS
-                      </span>
-                    </div>
-                    <p className="text-slate-700 leading-relaxed text-lg font-medium mb-12">
-                      {reply}
-                    </p>
-                    <div className="flex justify-end pt-2">
-                      <button 
-                        onClick={() => handleCopy(reply, idx)}
-                        className={`flex items-center gap-2.5 px-6 py-3 rounded-2xl transition-all font-bold text-sm tracking-tight ${
-                          copiedIndex === idx 
-                          ? 'bg-emerald-500 text-white shadow-lg shadow-emerald-200' 
-                          : 'bg-slate-900 text-white hover:bg-slate-800 shadow-xl shadow-slate-200 active:scale-95'
-                        }`}
-                      >
-                        {copiedIndex === idx ? (
-                          <>
-                            <Check className="w-4 h-4 stroke-[3px]" />
-                            <span>Copied!</span>
-                          </>
-                        ) : (
-                          <>
-                            <Copy className="w-4 h-4" />
-                            <span>Copy to Clipboard</span>
-                          </>
-                        )}
-                      </button>
-                    </div>
-                    
-                    {/* Subtle design element */}
-                    <div className="absolute top-0 right-0 w-24 h-24 bg-linear-to-br from-blue-50 to-transparent opacity-50 -mr-12 -mt-12 rounded-full" />
-                  </Motion.div>
-                ))}
-              </div>
-            )}
+                      
+                      {/* Magic Edit: Text Area instead of Paragraph */}
+                      <textarea 
+                        value={reply}
+                        onChange={(e) => handleReplyEdit(idx, e.target.value)}
+                        className="w-full bg-slate-50/50 p-4 rounded-2xl border border-transparent focus:border-blue-200 focus:bg-white text-slate-700 leading-relaxed text-lg font-medium outline-none resize-none min-h-[120px] transition-all"
+                        spellCheck="false"
+                      />
+
+                      <div className="flex justify-end pt-6">
+                        <button 
+                          onClick={() => handleCopy(reply, idx)}
+                          className={`flex items-center gap-2.5 px-6 py-3 rounded-2xl transition-all font-bold text-sm tracking-tight ${
+                            copiedIndex === idx 
+                            ? 'bg-emerald-500 text-white shadow-lg shadow-emerald-200' 
+                            : 'bg-slate-900 text-white hover:bg-slate-800 shadow-xl shadow-slate-200 active:scale-95'
+                          }`}
+                        >
+                          {copiedIndex === idx ? (
+                            <>
+                              <Check className="w-4 h-4 stroke-[3px]" />
+                              <span>Copied!</span>
+                            </>
+                          ) : (
+                            <>
+                              <Copy className="w-4 h-4" />
+                              <span>Copy to Clipboard</span>
+                            </>
+                          )}
+                        </button>
+                      </div>
+                      
+                      {/* Subtle design element */}
+                      <div className="absolute top-0 right-0 w-24 h-24 bg-linear-to-br from-blue-50 to-transparent opacity-50 -mr-12 -mt-12 rounded-full" />
+                    </Motion.div>
+                  ))}
+                </Motion.div>
+              ) : null}
+            </AnimatePresence>
             {/* Recent Activity Section */}
             {activePage === 'tool' && (
               <div className="mt-24 pt-16 border-t border-slate-200">
+                
+                {/* User Analytics Dashboard */}
+                {user && (
+                  <div className="mb-14">
+                    <div className="flex items-center gap-3 mb-6">
+                      <div className="w-12 h-12 bg-blue-100 rounded-2xl flex items-center justify-center shadow-sm shadow-blue-50">
+                        <TrendingUp className="text-blue-600 w-6 h-6" />
+                      </div>
+                      <h3 className="text-2xl font-bold text-slate-800 tracking-tight">Your Analytics</h3>
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 md:gap-6">
+                      <div className="bg-blue-50/80 p-6 rounded-4xl border border-blue-100 shadow-sm flex items-center gap-4 group hover:shadow-lg hover:shadow-blue-100/50 transition-all">
+                        <div className="w-14 h-14 bg-white rounded-full flex items-center justify-center shadow-sm shadow-blue-100/50 group-hover:scale-110 transition-transform">
+                          <Check className="text-blue-600 w-6 h-6 stroke-[3px]" />
+                        </div>
+                        <div>
+                          <p className="text-[11px] font-extrabold text-blue-500 uppercase tracking-widest mb-0.5">Total Responses</p>
+                          <p className="text-3xl font-black text-slate-800 tracking-tighter">{userStats.total}</p>
+                        </div>
+                      </div>
+                      <div className="bg-emerald-50/80 p-6 rounded-4xl border border-emerald-100 shadow-sm flex items-center gap-4 group hover:shadow-lg hover:shadow-emerald-100/50 transition-all">
+                        <div className="w-14 h-14 bg-white rounded-full flex items-center justify-center shadow-sm shadow-emerald-100/50 group-hover:scale-110 transition-transform">
+                          <Clock className="text-emerald-600 w-6 h-6 stroke-[3px]" />
+                        </div>
+                        <div>
+                          <p className="text-[11px] font-extrabold text-emerald-500 uppercase tracking-widest mb-0.5">Time Saved</p>
+                          <p className="text-3xl font-black text-slate-800 tracking-tighter">{userStats.total * 2} <span className="text-base font-bold text-emerald-600">Mins</span></p>
+                        </div>
+                      </div>
+                      <div className="bg-indigo-50/80 p-6 rounded-4xl border border-indigo-100 shadow-sm flex items-center gap-4 group hover:shadow-lg hover:shadow-indigo-100/50 transition-all">
+                        <div className="w-14 h-14 bg-white rounded-full flex items-center justify-center shadow-sm shadow-indigo-100/50 group-hover:scale-110 transition-transform">
+                          <Zap className="text-indigo-600 w-6 h-6 stroke-[3px]" />
+                        </div>
+                        <div>
+                          <p className="text-[11px] font-extrabold text-indigo-500 uppercase tracking-widest mb-0.5">Replies This Month</p>
+                          <p className="text-3xl font-black text-slate-800 tracking-tighter">{userStats.thisMonth}</p>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
                 <div className="flex items-center justify-between mb-8 group">
                   <div className="flex items-center gap-3">
                     <div className="w-12 h-12 bg-slate-900 rounded-2xl flex items-center justify-center shadow-lg shadow-slate-200 group-hover:rotate-12 transition-transform">
@@ -743,6 +1118,117 @@ const App = () => {
           </div>
         </div>
       </footer>
+
+      {/* Auth Modal */}
+      <AnimatePresence>
+        {authModalOpen && (
+          <div className="fixed inset-0 z-100 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm">
+            <Motion.div 
+              initial={{ opacity: 0, scale: 0.95, y: 10 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 10 }}
+              className="bg-white rounded-3xl p-8 max-w-sm w-full shadow-2xl border border-slate-100 relative"
+            >
+              <button onClick={() => setAuthModalOpen(false)} className="absolute top-4 right-4 p-2 text-slate-400 hover:bg-slate-50 rounded-full transition-colors">
+                <X className="w-5 h-5" />
+              </button>
+              
+              <div className="w-12 h-12 bg-blue-50 rounded-2xl flex items-center justify-center mb-6 shadow-sm shadow-blue-50">
+                <Lock className="text-blue-600 w-6 h-6" />
+              </div>
+              <h3 className="text-2xl font-bold text-slate-800 tracking-tight mb-2">
+                {authMode === 'signup' ? 'Sign up to unlock' : 'Welcome back'}
+              </h3>
+              <p className="text-slate-500 text-sm mb-6 leading-relaxed">
+                {authMode === 'signup' ? 'Sign up to unlock unlimited history and save your business profile.' : 'Sign in to access your saved replies and business profile.'}
+              </p>
+
+              <form onSubmit={handleAuthSubmit} className="space-y-4">
+                <div>
+                  <label className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1 block">Email</label>
+                  <input type="email" value={authEmail} onChange={e => setAuthEmail(e.target.value)} required className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-4 focus:ring-blue-50 focus:border-blue-500 transition-all text-sm font-medium" placeholder="you@company.com" />
+                </div>
+                <div>
+                  <label className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1 block">Password</label>
+                  <input type="password" value={authPassword} onChange={e => setAuthPassword(e.target.value)} required className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-4 focus:ring-blue-50 focus:border-blue-500 transition-all text-sm font-medium" placeholder="••••••••" minLength="6" />
+                </div>
+                <button type="submit" className="w-full bg-blue-600 text-white py-3.5 rounded-xl font-bold hover:bg-blue-700 transition-all shadow-lg shadow-blue-200 flex justify-center items-center gap-2 mt-2">
+                  {authMode === 'signup' ? 'Create Account' : 'Sign In'} <ArrowRight className="w-4 h-4" />
+                </button>
+              </form>
+
+              <div className="mt-6 text-center">
+                <button 
+                  type="button" 
+                  onClick={() => setAuthMode(authMode === 'signup' ? 'login' : 'signup')}
+                  className="text-sm font-bold text-slate-500 hover:text-blue-600 transition-colors"
+                >
+                  {authMode === 'signup' ? 'Already have an account? Sign in' : 'Need an account? Sign up'}
+                </button>
+              </div>
+            </Motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Business Profile Modal */}
+      <AnimatePresence>
+        {showSettings && user && (
+          <div className="fixed inset-0 z-100 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm">
+            <Motion.div 
+              initial={{ opacity: 0, scale: 0.95, y: 10 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 10 }}
+              className="bg-white rounded-3xl p-8 max-w-md w-full shadow-2xl border border-slate-100 relative"
+            >
+              <button onClick={() => setShowSettings(false)} className="absolute top-4 right-4 p-2 text-slate-400 hover:bg-slate-50 rounded-full transition-colors">
+                <X className="w-5 h-5" />
+              </button>
+              
+              <div className="w-12 h-12 bg-indigo-50 rounded-2xl flex items-center justify-center mb-6 shadow-sm shadow-indigo-50">
+                <Briefcase className="text-indigo-600 w-6 h-6" />
+              </div>
+              <h3 className="text-2xl font-bold text-slate-800 tracking-tight mb-2">
+                Business Profile
+              </h3>
+              <p className="text-slate-500 text-sm mb-6 leading-relaxed">
+                We&apos;ll automatically use this context to generate smarter, personalized replies.
+              </p>
+
+              <form onSubmit={handleSaveProfile} className="space-y-4">
+                <div>
+                  <label className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1 block">Business Name</label>
+                  <input type="text" value={businessProfile.business_name} onChange={e => setBusinessProfile({...businessProfile, business_name: e.target.value})} className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-4 focus:ring-indigo-50 focus:border-indigo-500 transition-all text-sm font-medium" placeholder="E.g. Joe's Coffee Shop" required />
+                </div>
+                <div>
+                  <label className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1 block">Industry</label>
+                  <input type="text" value={businessProfile.industry_type} onChange={e => setBusinessProfile({...businessProfile, industry_type: e.target.value})} className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-4 focus:ring-indigo-50 focus:border-indigo-500 transition-all text-sm font-medium" placeholder="E.g. Restaurant, SaaS, Retail" />
+                </div>
+                <div>
+                  <label className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1 block">Business Description</label>
+                  <textarea value={businessProfile.business_description} onChange={e => setBusinessProfile({...businessProfile, business_description: e.target.value})} className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-4 focus:ring-indigo-50 focus:border-indigo-500 transition-all text-sm font-medium h-24 resize-none" placeholder="What makes your business unique? (USPs)" />
+                </div>
+                <div>
+                  <label className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1 block">Preferred Tone</label>
+                  <select value={businessProfile.preferred_tone} onChange={e => setBusinessProfile({...businessProfile, preferred_tone: e.target.value})} className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-4 focus:ring-indigo-50 focus:border-indigo-500 transition-all text-sm font-medium appearance-none">
+                    <option value="Friendly">Friendly</option>
+                    <option value="Professional">Professional</option>
+                    <option value="Apologetic">Apologetic</option>
+                    <option value="Witty">Witty</option>
+                  </select>
+                </div>
+                <div className="pt-2">
+                  <button type="submit" disabled={isSavingProfile} className="w-full bg-indigo-600 text-white py-3.5 rounded-xl font-bold hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-200 flex justify-center items-center gap-2">
+                    {isSavingProfile ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
+                    Save Business Context
+                  </button>
+                </div>
+              </form>
+            </Motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
     </div>
   );
 };

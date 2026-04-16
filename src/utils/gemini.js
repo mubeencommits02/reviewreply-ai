@@ -34,13 +34,26 @@ export const analyzeReview = async (review) => {
   }
 };
 
-export const generateReplies = async (review, tone, language) => {
-  const prompt = `You are an expert business reputation manager with 10 years of experience.
+export const generateReplies = async (review, tone, language, businessProfile = null) => {
+  let context = "You are an expert business reputation manager with 10 years of experience.";
+  
+  if (businessProfile && businessProfile.business_name) {
+    context = `You are a professional reputation manager for "${businessProfile.business_name}". 
+    Business Details:
+    - Industry: ${businessProfile.industry_type || 'General'}
+    - Description: ${businessProfile.business_description || 'A quality business'}
+    - Preferred Tone: ${businessProfile.preferred_tone || tone}
+    
+    Reply to this customer review personally and professionally on behalf of the business.`;
+  }
+
+  const prompt = `${context}
 When given a customer Google review, generate exactly 3 different reply options in the selected tone: "${tone}".
-Generate all 3 replies strictly in the selected language only (${language}). If Arabic is selected, write in Arabic script. If Urdu is selected, write in Urdu script. If Hindi is selected, write in Devanagari script. If English is selected, write in English.
+Generate all 3 replies strictly in the selected language only (${language}).
 Each reply must:
 - start differently
 - acknowledge specific details from the review
+- be personal and highlight the business's unique value
 - be 50-80 words long
 - sound human and natural not robotic
 - end with an invitation to return or contact directly.
