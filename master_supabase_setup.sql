@@ -1,6 +1,6 @@
--- ReviewReply AI Master Setup Script
+-- ReviewReply AI Master Setup Script (Prometheus E2E Standard)
 
--- 1. Create Profiles Table (for core user data)
+-- 1. Create Profiles Table
 CREATE TABLE IF NOT EXISTS public.profiles (
   id UUID REFERENCES auth.users(id) ON DELETE CASCADE PRIMARY KEY,
   full_name TEXT,
@@ -9,11 +9,13 @@ CREATE TABLE IF NOT EXISTS public.profiles (
 );
 
 -- 2. Create Business Profiles Table (The Context Engine)
+-- Standardized for GATE 2.1 (Id-Null Gate)
 CREATE TABLE IF NOT EXISTS public.business_profiles (
-  id UUID REFERENCES auth.users(id) ON DELETE CASCADE PRIMARY KEY,
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  user_id UUID UNIQUE REFERENCES auth.users(id) ON DELETE CASCADE,
   business_name TEXT,
-  industry_type TEXT,
-  business_description TEXT,
+  industry TEXT,
+  usps TEXT,
   preferred_tone TEXT DEFAULT 'Professional',
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW()
@@ -24,7 +26,7 @@ ALTER TABLE public.business_profiles ENABLE ROW LEVEL SECURITY;
 
 CREATE POLICY "Users can manage their own business profile."
 ON public.business_profiles FOR ALL
-USING (auth.uid() = id);
+USING (auth.uid() = user_id);
 
 -- 3. Create Reviews History Table
 CREATE TABLE IF NOT EXISTS public.reviews_history (
@@ -44,7 +46,13 @@ CREATE POLICY "Users can manage their own history."
 ON public.reviews_history FOR ALL
 USING (auth.uid() = user_id);
 
--- 4. Social Proof Helper (Public read for count stats - Optional)
-CREATE POLICY "Public read for total count"
-ON public.reviews_history FOR SELECT
-USING (true);
+-- 4. Global Stats (Helper for landing page / dashboard)
+CREATE TABLE IF NOT EXISTS public.global_stats (
+  id INTEGER PRIMARY KEY,
+  total_replies BIGINT DEFAULT 0
+);
+
+-- Seed global stats if not exists
+INSERT INTO public.global_stats (id, total_replies) 
+VALUES (1, 0) 
+ON CONFLICT (id) DO NOTHING;

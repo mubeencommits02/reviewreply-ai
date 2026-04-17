@@ -1,7 +1,6 @@
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';
-import LoginPage from './pages/Login';
-import SignupPage from './pages/Signup';
+import Auth from './pages/Auth';
 import Dashboard from './pages/Dashboard';
 import Settings from './pages/Settings';
 import Layout from './components/Layout';
@@ -14,13 +13,13 @@ const ProtectedRoute = ({ children }) => {
   
   if (loading) {
     return (
-      <div className="h-screen w-screen flex items-center justify-center bg-slate-50">
-        <Loader2 className="w-10 h-10 animate-spin text-blue-600" />
+      <div className="h-screen w-screen flex items-center justify-center bg-[#F9FAFB]">
+        <Loader2 size={40} className="animate-spin text-indigo-600" strokeWidth={1.75} />
       </div>
     );
   }
   
-  if (!user) return <Navigate to="/login" replace />;
+  if (!user) return <Navigate to="/auth" replace />;
   return children;
 };
 
@@ -28,7 +27,7 @@ const ProtectedRoute = ({ children }) => {
 const RootRedirect = () => {
   const { user, loading } = useAuth();
   if (loading) return null;
-  return user ? <Navigate to="/dashboard" replace /> : <Navigate to="/login" replace />;
+  return user ? <Navigate to="/dashboard" replace /> : <Navigate to="/auth" replace />;
 };
 
 function App() {
@@ -39,9 +38,10 @@ function App() {
           {/* Root Redirect */}
           <Route path="/" element={<RootRedirect />} />
           
-          {/* Public Routes */}
-          <Route path="/login" element={<LoginPage />} />
-          <Route path="/signup" element={<SignupPage />} />
+          {/* Unified Auth Route */}
+          <Route path="/auth" element={<Auth />} />
+          <Route path="/login" element={<Navigate to="/auth" replace />} />
+          <Route path="/signup" element={<Navigate to="/auth" replace />} />
 
           {/* Protected Routes inside Layout */}
           <Route element={<ProtectedRoute><Layout /></ProtectedRoute>}>
