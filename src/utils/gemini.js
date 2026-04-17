@@ -35,30 +35,23 @@ export const analyzeReview = async (review) => {
 };
 
 export const generateReplies = async (review, tone, language, businessProfile = null) => {
-  let context = "You are an expert business reputation manager with 10 years of experience.";
-  
-  if (businessProfile && businessProfile.business_name) {
-    context = `You are a professional reputation manager for "${businessProfile.business_name}". 
-    Business Details:
-    - Industry: ${businessProfile.industry_type || 'General'}
-    - Description: ${businessProfile.business_description || 'A quality business'}
-    - Preferred Tone: ${businessProfile.preferred_tone || tone}
-    
-    Reply to this customer review personally and professionally on behalf of the business.`;
-  }
+  const businessName = businessProfile?.business_name || 'our business';
+  const industry = businessProfile?.industry || 'General';
+  const usps = businessProfile?.usps || 'quality service and customer satisfaction';
+
+  const context = `You are a professional review response specialist for ${businessName}, a ${industry} business. Our key strengths are: ${usps}.`;
 
   const prompt = `${context}
-When given a customer Google review, generate exactly 3 different reply options in the selected tone: "${tone}".
+Write a ${tone} response to this review: "${review}"
+Generate exactly 3 different reply options.
 Generate all 3 replies strictly in the selected language only (${language}).
 Each reply must:
-- start differently
 - acknowledge specific details from the review
-- be personal and highlight the business's unique value
+- be personal and highlight our strengths
 - be 50-80 words long
-- sound human and natural not robotic
-- end with an invitation to return or contact directly.
-Return only the 3 replies numbered 1, 2, 3 — nothing else.
-Customer Review: "${review}"`;
+- sound human and natural
+- end with an invitation to return.
+Return only the 3 replies numbered 1, 2, 3.`;
 
   const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
     method: 'POST',

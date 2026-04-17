@@ -11,15 +11,20 @@ import {
   TrendingUp,
   Clock,
   History,
-  ArrowRight
+  ArrowRight,
+  LogOut,
+  Settings as SettingsIcon,
+  Globe
 } from 'lucide-react';
 import { motion as Motion, AnimatePresence } from 'framer-motion';
-import { generateReplies, analyzeReview } from '../utils/gemini';
-import { supabase } from '../utils/supabaseClient';
+import { useNavigate, Link } from 'react-router-dom';
+import { generateReplies } from '../utils/gemini';
+import { supabase } from '../lib/supabaseClient';
 import { useAuth } from '../context/AuthContext';
 
 const Dashboard = () => {
-  const { user } = useAuth();
+  const { user, signOut } = useAuth();
+  const navigate = useNavigate();
   const [reviewText, setReviewText] = useState("");
   const [selectedTone, setSelectedTone] = useState('Friendly');
   const [selectedLanguage, setSelectedLanguage] = useState('English');
@@ -27,9 +32,9 @@ const Dashboard = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
   const [copiedIndex, setCopiedIndex] = useState(null);
-  const [sentiment, setSentiment] = useState(null);
   const [history, setHistory] = useState([]);
   const [userStats, setUserStats] = useState({ total: 0, thisMonth: 0 });
+  const [globalStats, setGlobalStats] = useState({ total_replies: 0 });
   const [businessProfile, setBusinessProfile] = useState(null);
 
   useEffect(() => {
@@ -37,14 +42,14 @@ const Dashboard = () => {
       fetchProfile();
       fetchHistory();
       fetchUserStats();
+      fetchGlobalStats();
     }
   }, [user]);
 
   const fetchProfile = async () => {
-    const { data } = await supabase.from('business_profiles').select('*').eq('id', user.id).single();
+    const { data } = await supabase.from('business_profiles').select('*').eq('user_id', user.id).single();
     if (data) {
       setBusinessProfile(data);
-      if (data.preferred_tone) setSelectedTone(data.preferred_tone);
     }
   };
 
@@ -54,7 +59,7 @@ const Dashboard = () => {
       .select('*')
       .eq('user_id', user.id)
       .order('created_at', { ascending: false })
-      .limit(10);
+      .limit(20);
     if (data) setHistory(data);
   };
 
@@ -63,6 +68,11 @@ const Dashboard = () => {
     const startOfMonth = new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString();
     const { count: thisMonth } = await supabase.from('reviews_history').select('*', { count: 'exact', head: true }).eq('user_id', user.id).gte('created_at', startOfMonth);
     setUserStats({ total: total || 0, thisMonth: thisMonth || 0 });
+  };
+
+  const fetchGlobalStats = async () => {
+    const { data } = await supabase.from('global_stats').select('total_replies').eq('id', 1).single();
+    if (data) setGlobalStats(data);
   };
 
   const handleGenerate = async () => {
@@ -77,13 +87,19 @@ const Dashboard = () => {
       await supabase.from('reviews_history').insert([{
         user_id: user.id,
         review_text: reviewText,
-        ai_reply: result[0],
-        tone: selectedTone,
-        language: selectedLanguage
+        generated_reply: result[0], // Save the primary generation
+        tone: selectedTone
       }]);
+
+      // Increment Global Stats
+      await supabase.rpc('increment_global_stats');
+      // If RPC is not setup, use update
+      const { data: currentStats } = await supabase.from('global_stats').select('total_replies').eq('id', 1).single();
+      await supabase.from('global_stats').update({ total_replies: (currentStats?.total_replies || 0) + 1 }).eq('id', 1);
       
       fetchHistory();
       fetchUserStats();
+      fetchGlobalStats();
       
       setTimeout(() => document.getElementById('results-section')?.scrollIntoView({ behavior: 'smooth' }), 100);
     } catch (err) {
@@ -99,6 +115,11 @@ const Dashboard = () => {
     setTimeout(() => setCopiedIndex(null), 2000);
   };
 
+  const handleSignOut = async () => {
+    await signOut();
+    navigate('/login');
+  };
+
   return (
     <div className="space-y-10">
       <header className="flex flex-col md:flex-row md:items-center justify-between gap-4">
@@ -107,17 +128,27 @@ const Dashboard = () => {
           <p className="text-slate-500 font-medium">Create personal, high-converting review replies in seconds.</p>
         </div>
         <div className="flex items-center gap-3">
-          <div className="px-5 py-2.5 bg-blue-600 text-white rounded-2xl font-bold text-sm shadow-xl shadow-blue-100 flex items-center gap-2">
-            <Zap className="w-4 h-4 fill-current" /> Auto-Context Active
+          <div className="flex items-center gap-2 px-4 py-2 bg-white rounded-xl border border-slate-100 shadow-sm">
+            <div className="w-8 h-8 rounded-full bg-blue-50 flex items-center justify-center text-blue-600">
+              <LogOut className="w-4 h-4 cursor-pointer" onClick={handleSignOut} title="Sign Out" />
+            </div>
+            <div className="text-left hidden sm:block">
+              <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Logged in as</p>
+              <p className="text-xs font-bold text-slate-700">{user?.email}</p>
+            </div>
           </div>
+          <Link to="/settings" className="p-3 bg-white hover:bg-slate-50 border border-slate-100 rounded-xl shadow-sm transition-all group">
+            <SettingsIcon className="w-5 h-5 text-slate-400 group-hover:text-blue-600 group-hover:rotate-45 transition-all" />
+          </Link>
         </div>
       </header>
 
       {/* Analytics */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 sm:grid-cols-4 gap-6">
         <StatCard icon={<TrendingUp className="text-blue-600" />} label="Total Replies" value={userStats.total} bg="bg-blue-50" color="text-blue-600" />
         <StatCard icon={<Clock className="text-emerald-600" />} label="Hours Saved" value={Math.floor(userStats.total * 30 / 60)} unit="Hrs" bg="bg-emerald-50" color="text-emerald-600" />
         <StatCard icon={<Zap className="text-indigo-600" />} label="This Month" value={userStats.thisMonth} bg="bg-indigo-50" color="text-indigo-600" />
+        <StatCard icon={<Globe className="text-amber-600" />} label="Global Impact" value={globalStats.total_replies} bg="bg-amber-50" color="text-amber-600" />
       </div>
 
       <div className="grid lg:grid-cols-5 gap-10">
@@ -211,7 +242,7 @@ const Dashboard = () => {
                   <p className="text-xs text-slate-800 font-medium line-clamp-2 mb-3">"{item.review_text}"</p>
                   <div className="flex items-center justify-between">
                     <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">{new Date(item.created_at).toLocaleDateString()}</span>
-                    <button onClick={() => handleCopy(item.ai_reply, `h-${idx}`)} className="text-blue-600 opacity-0 group-hover:opacity-100 transition-opacity font-bold text-[10px] uppercase">Quick Copy</button>
+                    <button onClick={() => handleCopy(item.generated_reply || item.ai_reply, `h-${idx}`)} className="text-blue-600 opacity-0 group-hover:opacity-100 transition-opacity font-bold text-[10px] uppercase">Quick Copy</button>
                   </div>
                 </div>
               )) : (
