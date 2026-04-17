@@ -3,7 +3,7 @@ import { AuthProvider, useAuth } from './context/AuthContext';
 import LoginPage from './pages/Login';
 import SignupPage from './pages/Signup';
 import Dashboard from './pages/Dashboard';
-import BusinessSettingsPage from './pages/BusinessSettingsPage';
+import Settings from './pages/Settings';
 import Layout from './components/Layout';
 import { Loader2 } from 'lucide-react';
 import './App.css';
@@ -46,7 +46,7 @@ function App() {
           {/* Protected Routes inside Layout */}
           <Route element={<ProtectedRoute><Layout /></ProtectedRoute>}>
             <Route path="/dashboard" element={<Dashboard />} />
-            <Route path="/settings" element={<BusinessSettingsPage />} />
+            <Route path="/settings" element={<Settings />} />
           </Route>
 
           {/* Fallback */}
