@@ -14,11 +14,15 @@ import {
   ArrowRight,
   LogOut,
   Settings as SettingsIcon,
-  Globe
+  Globe,
+  ChevronDown,
+  ChevronRight,
+  Building2,
+  Sparkles
 } from 'lucide-react';
 import { motion as Motion, AnimatePresence } from 'framer-motion';
 import { useNavigate, Link } from 'react-router-dom';
-import { generateReplies } from '../utils/gemini';
+import { generateReplies, analyzeReview } from '../utils/gemini';
 import { supabase } from '../lib/supabaseClient';
 import { useAuth } from '../context/AuthContext';
 
@@ -26,16 +30,20 @@ const Dashboard = () => {
   const { user, signOut } = useAuth();
   const navigate = useNavigate();
   const [reviewText, setReviewText] = useState("");
-  const [selectedTone, setSelectedTone] = useState('Friendly');
+  const [selectedTone, setSelectedTone] = useState('Auto'); // Default to Auto
   const [selectedLanguage, setSelectedLanguage] = useState('English');
+  const [isLangMenuOpen, setIsLangMenuOpen] = useState(false);
   const [replies, setReplies] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
+  const [successToast, setSuccessToast] = useState('');
   const [copiedIndex, setCopiedIndex] = useState(null);
   const [history, setHistory] = useState([]);
   const [userStats, setUserStats] = useState({ total: 0, thisMonth: 0 });
   const [globalStats, setGlobalStats] = useState({ total_replies: 0 });
   const [businessProfile, setBusinessProfile] = useState(null);
+
+  const langRef = useRef(null);
 
   useEffect(() => {
     if (user) {
@@ -45,6 +53,16 @@ const Dashboard = () => {
       fetchGlobalStats();
     }
   }, [user]);
+
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (langRef.current && !langRef.current.contains(event.target)) {
+        setIsLangMenuOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
 
   const fetchProfile = async () => {
     const { data } = await supabase.from('business_profiles').select('*').eq('user_id', user.id).single();
@@ -80,20 +98,28 @@ const Dashboard = () => {
     setIsLoading(true);
     setError('');
     try {
-      const result = await generateReplies(reviewText, selectedTone, selectedLanguage, businessProfile);
+      let finalTone = selectedTone;
+      
+      // Smart Auto-Tone Logic
+      if (selectedTone === 'Auto') {
+        const analysis = await analyzeReview(reviewText);
+        if (analysis?.sentiment === 'positive') finalTone = 'Enthusiastic & Grateful';
+        else if (analysis?.sentiment === 'negative') finalTone = 'Apologetic & Professional';
+        else finalTone = 'Informative & Helpful';
+      }
+
+      const result = await generateReplies(reviewText, finalTone, selectedLanguage, businessProfile);
       setReplies(result);
       
       // Save to Supabase
       await supabase.from('reviews_history').insert([{
         user_id: user.id,
         review_text: reviewText,
-        generated_reply: result[0], // Save the primary generation
-        tone: selectedTone
+        generated_reply: result[0],
+        tone: finalTone
       }]);
 
       // Increment Global Stats
-      await supabase.rpc('increment_global_stats');
-      // If RPC is not setup, use update
       const { data: currentStats } = await supabase.from('global_stats').select('total_replies').eq('id', 1).single();
       await supabase.from('global_stats').update({ total_replies: (currentStats?.total_replies || 0) + 1 }).eq('id', 1);
       
@@ -112,7 +138,13 @@ const Dashboard = () => {
   const handleCopy = async (text, index) => {
     await navigator.clipboard.writeText(text);
     setCopiedIndex(index);
+    showToast("Reply copied to clipboard! 📋");
     setTimeout(() => setCopiedIndex(null), 2000);
+  };
+
+  const showToast = (message) => {
+    setSuccessToast(message);
+    setTimeout(() => setSuccessToast(''), 3000);
   };
 
   const handleSignOut = async () => {
@@ -122,19 +154,41 @@ const Dashboard = () => {
 
   return (
     <div className="space-y-10">
-      <header className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div>
+      <header className="flex flex-col md:flex-row md:items-center justify-between gap-6">
+        <div className="flex-1">
           <h1 className="text-3xl font-black text-slate-800 tracking-tight">Generator Hub</h1>
           <p className="text-slate-500 font-medium">Create personal, high-converting review replies in seconds.</p>
         </div>
+
+        {/* Active Business Context Card */}
+        {businessProfile && (
+          <Motion.div 
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="flex items-center gap-4 py-3 px-5 bg-white border border-slate-100 rounded-3xl shadow-sm min-w-[280px]"
+          >
+            <div className="w-12 h-12 bg-blue-50 rounded-2xl flex items-center justify-center text-blue-600">
+              <Building2 className="w-6 h-6" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Active Context</p>
+              <p className="text-sm font-bold text-slate-800 truncate">{businessProfile.business_name}</p>
+              <p className="text-[10px] text-blue-600 font-bold">{businessProfile.industry}</p>
+            </div>
+            <Link to="/settings" className="p-2 hover:bg-slate-50 rounded-xl transition-colors">
+              <ChevronRight className="w-4 h-4 text-slate-300" />
+            </Link>
+          </Motion.div>
+        )}
+
         <div className="flex items-center gap-3">
           <div className="flex items-center gap-2 px-4 py-2 bg-white rounded-xl border border-slate-100 shadow-sm">
-            <div className="w-8 h-8 rounded-full bg-blue-50 flex items-center justify-center text-blue-600">
-              <LogOut className="w-4 h-4 cursor-pointer" onClick={handleSignOut} title="Sign Out" />
+            <div className="w-8 h-8 rounded-full bg-slate-50 flex items-center justify-center text-slate-400 hover:text-red-500 transition-colors cursor-pointer" onClick={handleSignOut}>
+              <LogOut className="w-4 h-4" />
             </div>
             <div className="text-left hidden sm:block">
-              <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Logged in as</p>
-              <p className="text-xs font-bold text-slate-700">{user?.email}</p>
+              <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Account</p>
+              <p className="text-xs font-bold text-slate-700 truncate max-w-[120px]">{user?.email}</p>
             </div>
           </div>
           <Link to="/settings" className="p-3 bg-white hover:bg-slate-50 border border-slate-100 rounded-xl shadow-sm transition-all group">
@@ -145,10 +199,10 @@ const Dashboard = () => {
 
       {/* Analytics */}
       <div className="grid grid-cols-1 sm:grid-cols-4 gap-6">
-        <StatCard icon={<TrendingUp className="text-blue-600" />} label="Total Replies" value={userStats.total} bg="bg-blue-50" color="text-blue-600" />
-        <StatCard icon={<Clock className="text-emerald-600" />} label="Hours Saved" value={Math.floor(userStats.total * 30 / 60)} unit="Hrs" bg="bg-emerald-50" color="text-emerald-600" />
-        <StatCard icon={<Zap className="text-indigo-600" />} label="This Month" value={userStats.thisMonth} bg="bg-indigo-50" color="text-indigo-600" />
-        <StatCard icon={<Globe className="text-amber-600" />} label="Global Impact" value={globalStats.total_replies} bg="bg-amber-50" color="text-amber-600" />
+        <StatCard icon={<TrendingUp />} label="Total Replies" value={userStats.total} bg="bg-blue-50" color="text-blue-600" />
+        <StatCard icon={<Clock />} label="Hours Saved" value={Math.floor(userStats.total * 30 / 60)} unit="Hrs" bg="bg-emerald-50" color="text-emerald-600" />
+        <StatCard icon={<Zap />} label="This Month" value={userStats.thisMonth} bg="bg-indigo-50" color="text-indigo-600" />
+        <StatCard icon={<Globe />} label="Global Impact" value={globalStats.total_replies} bg="bg-amber-50" color="text-amber-600" />
       </div>
 
       <div className="grid lg:grid-cols-5 gap-10">
@@ -171,27 +225,58 @@ const Dashboard = () => {
                 <div className="w-8 h-8 rounded-full bg-blue-50 text-blue-600 flex items-center justify-center text-xs font-bold ring-4 ring-blue-50/50">2</div>
                 <span className="font-bold text-slate-800">Select Tone & Language</span>
               </div>
-              <div className="grid grid-cols-3 gap-3">
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                <ToneOption icon={<Sparkles />} label="Auto" active={selectedTone === 'Auto'} onClick={() => setSelectedTone('Auto')} />
                 <ToneOption icon={<Smile />} label="Friendly" active={selectedTone === 'Friendly'} onClick={() => setSelectedTone('Friendly')} />
                 <ToneOption icon={<Briefcase />} label="Professional" active={selectedTone === 'Professional'} onClick={() => setSelectedTone('Professional')} />
                 <ToneOption icon={<Heart className="text-red-500" />} label="Apologetic" active={selectedTone === 'Apologetic'} onClick={() => setSelectedTone('Apologetic')} />
               </div>
-              <select 
-                value={selectedLanguage}
-                onChange={(e) => setSelectedLanguage(e.target.value)}
-                className="w-full px-6 py-4 bg-slate-50 border border-slate-100 rounded-2xl outline-none focus:ring-4 focus:ring-blue-50 font-bold text-slate-700 appearance-none cursor-pointer"
-              >
-                <option>English</option>
-                <option>Arabic</option>
-                <option>Urdu</option>
-                <option>Hindi</option>
-              </select>
+
+              {/* Enhanced Language Selector */}
+              <div className="relative" ref={langRef}>
+                <button 
+                  onClick={() => setIsLangMenuOpen(!isLangMenuOpen)}
+                  className="w-full flex items-center justify-between px-6 py-4 bg-slate-50 border border-slate-100 rounded-2xl outline-none hover:bg-white hover:border-blue-200 transition-all font-bold text-slate-700 shadow-sm"
+                >
+                  <div className="flex items-center gap-3">
+                    <Globe className="w-4 h-4 text-blue-600" />
+                    <span>{selectedLanguage}</span>
+                  </div>
+                  <ChevronDown className={`w-4 h-4 text-slate-400 transition-transform ${isLangMenuOpen ? 'rotate-180' : ''}`} />
+                </button>
+                
+                <AnimatePresence>
+                  {isLangMenuOpen && (
+                    <Motion.div 
+                      initial={{ opacity: 0, y: 10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, y: 10 }}
+                      className="absolute bottom-full left-0 right-0 mb-3 bg-white border border-slate-100 rounded-2xl shadow-2xl z-50 overflow-hidden py-2"
+                    >
+                      {['English', 'Arabic', 'Urdu', 'Hindi', 'Spanish', 'French'].map(lang => (
+                        <button
+                          key={lang}
+                          onClick={() => {
+                            setSelectedLanguage(lang);
+                            setIsLangMenuOpen(false);
+                          }}
+                          className={`w-full text-left px-6 py-3 text-sm font-bold transition-colors ${
+                            selectedLanguage === lang ? 'text-blue-600 bg-blue-50' : 'text-slate-600 hover:bg-slate-50'
+                          }`}
+                        >
+                          {lang}
+                        </button>
+                      ))}
+                    </Motion.div>
+                  )}
+                </AnimatePresence>
+              </div>
             </div>
 
             <button 
               onClick={handleGenerate}
               disabled={isLoading}
-              className="w-full mt-10 py-5 bg-blue-600 text-white rounded-[1.5rem] font-bold text-lg hover:bg-blue-700 transition-all shadow-xl shadow-blue-100 flex items-center justify-center gap-3 disabled:bg-slate-200"
+              className="w-full mt-10 py-5 bg-blue-600 text-white rounded-[1.5rem] font-bold text-lg hover:bg-blue-700 hover:scale-[1.01] active:scale-[0.99] transition-all shadow-xl shadow-blue-100 flex items-center justify-center gap-3 disabled:bg-slate-200"
             >
               {isLoading ? <Loader2 className="w-6 h-6 animate-spin" /> : <>Generate Replies ✨</>}
             </button>
@@ -228,7 +313,7 @@ const Dashboard = () => {
 
         {/* Sidebar History */}
         <div className="lg:col-span-2">
-          <div className="bg-white p-8 rounded-[2.5rem] border border-slate-100 shadow-sm h-full max-h-[1000px] flex flex-col">
+          <div className="bg-white p-8 rounded-[2.5rem] border border-slate-100 shadow-sm h-full max-h-[1000px] flex flex-col overflow-hidden">
             <div className="flex items-center justify-between mb-8">
               <h3 className="text-xl font-bold flex items-center gap-3">
                 <History className="w-5 h-5 text-slate-400" /> Recent History
@@ -255,6 +340,21 @@ const Dashboard = () => {
           </div>
         </div>
       </div>
+
+      {/* Success Toast */}
+      <AnimatePresence>
+        {successToast && (
+          <Motion.div 
+            initial={{ opacity: 0, y: 50 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 50 }}
+            className="fixed bottom-10 left-1/2 -translate-x-1/2 bg-slate-900 text-white px-8 py-4 rounded-2xl shadow-2xl z-50 flex items-center gap-3 font-bold border border-slate-700"
+          >
+            <div className="w-6 h-6 bg-emerald-500 rounded-full flex items-center justify-center text-white"><Check className="w-4 h-4" /></div>
+            {successToast}
+          </Motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 };

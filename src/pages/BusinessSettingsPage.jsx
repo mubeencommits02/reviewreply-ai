@@ -47,16 +47,20 @@ const BusinessSettingsPage = () => {
     e.preventDefault();
     setSaving(true);
     try {
+      // We do NOT send the 'id' field. Supabase generates it on Insert, 
+      // and finds the existing row using 'user_id' on Update via 'onConflict'.
       const { error } = await supabase
         .from('business_profiles')
         .upsert({ 
           user_id: user.id, 
-          ...profile,
+          business_name: profile.business_name,
+          industry: profile.industry,
+          usps: profile.usps,
           updated_at: new Date().toISOString()
         }, { onConflict: 'user_id' });
       
       if (error) throw error;
-      showToast("Settings saved successfully! ✨");
+      showToast("Profile updated successfully! ✨");
     } catch (err) {
       showToast("Error: " + err.message);
     } finally {

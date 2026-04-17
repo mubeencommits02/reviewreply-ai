@@ -47,7 +47,8 @@ Generate exactly 3 different reply options.
 Generate all 3 replies strictly in the selected language only (${language}).
 Each reply must:
 - acknowledge specific details from the review
-- be personal and highlight our strengths
+- be personal and mention ${businessName} naturally or as a sign-off
+- highlight our strengths: ${usps}
 - be 50-80 words long
 - sound human and natural
 - end with an invitation to return.
