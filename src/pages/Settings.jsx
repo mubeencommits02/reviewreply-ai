@@ -48,22 +48,37 @@ const Settings = () => {
     e.preventDefault();
     setSaving(true);
     try {
-      // GATE 2.1 — Upsert Conflict Resolution
-      // CRITICAL: No 'id' sent to allow PG auto-gen. Using 'user_id' for conflict.
+      // 1. Fetch latest authenticated user ID
+      const { data: { user: latestUser }, error: userError } = await supabase.auth.getUser();
+      if (userError || !latestUser) throw new Error("Authentication failed. Please sign in again.");
+
+      // 2. Construct sanitized payload (NO manual 'id' field)
+      const payload = { 
+        user_id: latestUser.id,
+        business_name: profile.business_name,
+        industry: profile.industry,
+        usps: profile.usps,
+        updated_at: new Date().toISOString()
+      };
+
+      // 3. URGENT DEBUG FIX: Upsert using user_id conflict logic
       const { error } = await supabase
         .from('business_profiles')
-        .upsert({ 
-          user_id: user.id, // Sourced from session
-          business_name: profile.business_name,
-          industry: profile.industry,
-          usps: profile.usps,
-          updated_at: new Date().toISOString()
-        }, { onConflict: 'user_id' });
+        .upsert(payload, { onConflict: 'user_id' });
       
       if (error) throw error;
+
+      // 4. Local state update for immediate UI feedback
+      setProfile({
+        business_name: profile.business_name,
+        industry: profile.industry,
+        usps: profile.usps
+      });
+
       showToast("Settings synced successfully! ✨");
     } catch (err) {
-      showToast("Sync Error: " + err.message);
+      showToast("Sync Error: " + (err.message || "Constraint violation"));
+      console.error("Save Error:", err);
     } finally {
       setSaving(false);
     }
