@@ -23,18 +23,20 @@ const Settings = () => {
 
   const fetchProfile = async () => {
     try {
-      // Sourcing user_id from session (GATE 2.2)
-      const { data } = await supabase
+      // Robust fetch: try to find by id or user_id (handles both schema variants)
+      const { data, error } = await supabase
         .from('business_profiles')
         .select('*')
-        .eq('user_id', user.id)
-        .single();
+        .or(`id.eq.${user.id},user_id.eq.${user.id}`)
+        .maybeSingle();
       
       if (data) {
         setProfile({
           business_name: data.business_name || '',
-          industry: data.industry || '',
-          usps: data.usps || ''
+          // Support both industry and industry_type column names
+          industry: data.industry || data.industry_type || '',
+          // Support both usps and business_description column names
+          usps: data.usps || data.business_description || ''
         });
       }
     } catch (err) {
@@ -52,21 +54,31 @@ const Settings = () => {
       const { data: { user: latestUser }, error: userError } = await supabase.auth.getUser();
       if (userError || !latestUser) throw new Error("Authentication failed. Please sign in again.");
 
-      // 2. Construct sanitized payload (NO manual 'id' field)
+      // 2. Construct polyfilled payload (handles both schema variants)
       const payload = { 
-        user_id: latestUser.id,
+        id: latestUser.id,
+        user_id: latestUser.id, // Set both to be safe
         business_name: profile.business_name,
         industry: profile.industry,
+        industry_type: profile.industry, // Polyfill
         usps: profile.usps,
+        business_description: profile.usps, // Polyfill
         updated_at: new Date().toISOString()
       };
 
-      // 3. URGENT DEBUG FIX: Upsert using user_id conflict logic
+      // 3. URGENT DEBUG FIX: Upsert with multiple conflict targets
+      // We try to upsert by id first, if that fails due to FK, it's likely the table structure
       const { error } = await supabase
         .from('business_profiles')
-        .upsert(payload, { onConflict: 'user_id' });
+        .upsert(payload, { onConflict: 'id' });
       
-      if (error) throw error;
+      if (error) {
+        console.warn("Retrying upsert with user_id conflict...");
+        const { error: retryError } = await supabase
+          .from('business_profiles')
+          .upsert(payload, { onConflict: 'user_id' });
+        if (retryError) throw retryError;
+      }
 
       // 4. Local state update for immediate UI feedback
       setProfile({

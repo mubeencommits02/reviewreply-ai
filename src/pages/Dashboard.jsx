@@ -75,9 +75,15 @@ const Dashboard = () => {
     const { data } = await supabase
       .from('business_profiles')
       .select('*')
-      .eq('user_id', user.id)
-      .single();
-    if (data) setBusinessProfile(data);
+      .or(`id.eq.${user.id},user_id.eq.${user.id}`)
+      .maybeSingle();
+    if (data) {
+      setBusinessProfile({
+        ...data,
+        industry: data.industry || data.industry_type,
+        usps: data.usps || data.business_description
+      });
+    }
   };
 
   const fetchHistory = async () => {
