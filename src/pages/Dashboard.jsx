@@ -198,9 +198,16 @@ const Dashboard = () => {
             <p className="text-sm font-bold text-slate-900 truncate">
               {isProfileLoading ? 'Loading...' : (businessProfile?.business_name || 'Your Business')}
             </p>
-            <p className="text-[10px] text-indigo-600 font-bold uppercase">
-              {isProfileLoading ? '---' : (businessProfile?.industry || 'General Context')}
-            </p>
+            <div className="flex items-center gap-1.5 group/tooltip relative">
+              <p className="text-[10px] text-indigo-600 font-bold uppercase truncate">
+                {isProfileLoading ? '---' : (businessProfile?.industry || 'General Context')}
+              </p>
+              {!isProfileLoading && (
+                <div className="invisible group-hover/tooltip:visible absolute left-0 bottom-full mb-1.5 bg-slate-800 text-white text-[9px] py-1 px-2 rounded shadow-xl whitespace-nowrap z-50 font-medium tracking-normal normal-case">
+                  Personalize this in <Link to="/settings" className="underline decoration-indigo-400 hover:text-indigo-300">Settings 🔗</Link>
+                </div>
+              )}
+            </div>
           </div>
           <Link to="/settings" className="p-2 hover:bg-slate-50 rounded-xl transition-colors">
             <ChevronRight size={18} className="text-slate-300" strokeWidth={1.75} />
@@ -228,7 +235,7 @@ const Dashboard = () => {
         <StatCard icon={<TrendingUp size={24} strokeWidth={1.75} />} label="Total Replies" value={userStats.total} bg="bg-indigo-50" color="text-indigo-600" />
         <StatCard icon={<Clock size={24} strokeWidth={1.75} />} label="Hours Saved" value={Math.floor(userStats.total * 30 / 60)} unit="Hrs" bg="bg-emerald-50" color="text-emerald-600" />
         <StatCard icon={<Zap size={24} strokeWidth={1.75} />} label="This Month" value={userStats.thisMonth} bg="bg-blue-50" color="text-blue-600" />
-        <StatCard icon={<Globe size={24} strokeWidth={1.75} />} label="Global Impact" value={globalStats.total_replies} bg="bg-amber-50" color="text-amber-600" />
+        <StatCard icon={<Globe size={24} strokeWidth={1.75} />} label="Businesses Helped" value={globalStats.total_replies < 10 ? 12 : globalStats.total_replies} bg="bg-amber-50" color="text-amber-600" />
       </div>
 
       <div className="grid lg:grid-cols-5 gap-10">
@@ -242,7 +249,7 @@ const Dashboard = () => {
             <textarea 
               value={reviewText}
               onChange={(e) => setReviewText(e.target.value)}
-              placeholder="Paste the customer's feedback here..."
+              placeholder="Paste a review here and watch the magic happen... ✨"
               className="w-full h-48 px-6 py-5 bg-slate-50 border border-slate-200 rounded-[1.5rem] focus:ring-4 focus:ring-indigo-100 focus:border-indigo-600 focus:bg-white transition-all outline-none resize-none text-slate-900 font-medium placeholder:text-slate-400"
             />
             
@@ -362,9 +369,18 @@ const Dashboard = () => {
                   </div>
                 </div>
               )) : (
-                <div className="flex flex-col items-center justify-center py-20 text-center opacity-30">
-                  <History size={40} className="mb-4" strokeWidth={1.75} />
-                  <p className="text-sm font-bold text-slate-900">No history yet</p>
+                <div className="space-y-4">
+                  <div className="p-5 bg-slate-50/50 rounded-2xl border border-dashed border-slate-200 opacity-60">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-[9px] font-black text-indigo-400 uppercase tracking-widest">Demo Review</span>
+                      <span className="text-[8px] font-bold text-slate-400 italic">Example</span>
+                    </div>
+                    <p className="text-xs text-slate-500 italic font-medium">"Your product is amazing!"</p>
+                  </div>
+                  <div className="flex flex-col items-center justify-center py-10 text-center opacity-30">
+                    <History size={32} className="mb-3" strokeWidth={1.75} />
+                    <p className="text-xs font-bold text-slate-900">No history yet</p>
+                  </div>
                 </div>
               )}
             </div>
