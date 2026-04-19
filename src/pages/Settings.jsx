@@ -54,31 +54,56 @@ const Settings = () => {
       const { data: { user: latestUser }, error: userError } = await supabase.auth.getUser();
       if (userError || !latestUser) throw new Error("Authentication failed. Please sign in again.");
 
-      // 2. Construct polyfilled payload (handles both schema variants)
-      const payload = { 
+      // 2. Construct payloads for different schema variants
+      const modernPayload = { 
         id: latestUser.id,
-        user_id: latestUser.id, // Set both to be safe
+        user_id: latestUser.id,
         business_name: profile.business_name,
         industry: profile.industry,
-        industry_type: profile.industry, // Polyfill
         usps: profile.usps,
-        business_description: profile.usps, // Polyfill
         updated_at: new Date().toISOString()
       };
 
-      // 3. URGENT DEBUG FIX: Upsert with multiple conflict targets
-      // We try to upsert by id first, if that fails due to FK, it's likely the table structure
-      const { error } = await supabase
+      const legacyPayload = {
+        id: latestUser.id,
+        business_name: profile.business_name,
+        industry_type: profile.industry,
+        business_description: profile.usps,
+        updated_at: new Date().toISOString()
+      };
+
+      // 3. Attempt sync with Modern Schema (industry/usps)
+      let { error } = await supabase
         .from('business_profiles')
-        .upsert(payload, { onConflict: 'id' });
+        .upsert(modernPayload, { onConflict: 'id' });
       
+      // 4. Fallback: If 'column not found', try Legacy Schema (industry_type/business_description)
+      if (error && (error.message?.includes('column') || error.code === '42703')) {
+        console.warn("Modern schema failed, trying legacy schema...");
+        const { error: legacyError } = await supabase
+          .from('business_profiles')
+          .upsert(legacyPayload, { onConflict: 'id' });
+        error = legacyError;
+      }
+
+      // 5. Secondary Fallback: If still failing, try user_id conflict instead of id
       if (error) {
-        console.warn("Retrying upsert with user_id conflict...");
+        console.warn("Retrying with user_id conflict...");
         const { error: retryError } = await supabase
           .from('business_profiles')
-          .upsert(payload, { onConflict: 'user_id' });
-        if (retryError) throw retryError;
+          .upsert(modernPayload, { onConflict: 'user_id' });
+        
+        if (retryError && (retryError.message?.includes('column') || retryError.code === '42703')) {
+          const { error: lastDitchError } = await supabase
+            .from('business_profiles')
+            .upsert(legacyPayload, { onConflict: 'user_id' });
+          error = lastDitchError;
+        } else {
+          error = retryError;
+        }
       }
+
+      if (error) throw error;
 
       // 4. Local state update for immediate UI feedback
       setProfile({
