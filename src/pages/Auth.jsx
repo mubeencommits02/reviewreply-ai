@@ -11,7 +11,6 @@ const Auth = () => {
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
-  const [isSuccess, setIsSuccess] = useState(false);
   
   const { signIn, signUp } = useAuth();
   const navigate = useNavigate();
@@ -35,11 +34,7 @@ const Auth = () => {
       } else {
         const { error } = await signUp({ email, password });
         if (error) throw error;
-        setIsSuccess(true);
-        setTimeout(() => {
-          setIsSuccess(false);
-          setIsLogin(true);
-        }, 5000);
+        navigate('/dashboard');
       }
     } catch (err) {
       setError(err.message);
@@ -47,30 +42,6 @@ const Auth = () => {
       setLoading(false);
     }
   };
-
-  if (isSuccess) {
-    return (
-      <div className="min-h-screen bg-[#F9FAFB] flex flex-col justify-center items-center p-4">
-        <Motion.div 
-          initial={{ opacity: 0, scale: 0.95 }}
-          animate={{ opacity: 1, scale: 1 }}
-          className="bg-white rounded-[2rem] p-10 max-w-md w-full shadow-sm border border-slate-200 text-center"
-        >
-          <div className="w-20 h-20 bg-emerald-50 rounded-full flex items-center justify-center mx-auto mb-6">
-            <CheckCircle2 className="text-emerald-500" size={40} strokeWidth={1.75} />
-          </div>
-          <h3 className="text-2xl font-bold text-slate-900 mb-2">Check your email</h3>
-          <p className="text-slate-500 leading-relaxed mb-6">
-            We've sent a confirmation link to <span className="font-bold text-slate-900">{email}</span>. Please verify your email to continue.
-          </p>
-          <div className="flex justify-center gap-2 items-center text-sm text-slate-400 font-medium">
-            <Loader2 className="animate-spin" size={18} strokeWidth={1.75} />
-            Waiting for verification...
-          </div>
-        </Motion.div>
-      </div>
-    );
-  }
 
   return (
     <div className="min-h-screen bg-[#F9FAFB] flex flex-col justify-center items-center p-4">
