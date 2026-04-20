@@ -10,7 +10,6 @@ const Signup = () => {
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
-  const [isSuccess, setIsSuccess] = useState(false);
   const { signUp } = useAuth();
   const navigate = useNavigate();
 
@@ -21,38 +20,13 @@ const Signup = () => {
     try {
       const { error } = await signUp({ email, password });
       if (error) throw error;
-      setIsSuccess(true);
-      setTimeout(() => navigate('/login'), 3000);
+      navigate('/dashboard');
     } catch (err) {
       setError(err.message);
     } finally {
       setLoading(false);
     }
   };
-
-  if (isSuccess) {
-    return (
-      <div className="min-h-screen bg-slate-50 flex flex-col justify-center items-center p-4">
-        <Motion.div 
-          initial={{ opacity: 0, scale: 0.9 }}
-          animate={{ opacity: 1, scale: 1 }}
-          className="bg-white rounded-3xl p-10 max-w-md w-full shadow-2xl border border-slate-100 text-center"
-        >
-          <div className="w-20 h-20 bg-emerald-50 rounded-full flex items-center justify-center mx-auto mb-6 shadow-sm">
-            <CheckCircle2 className="text-emerald-500 w-10 h-10" />
-          </div>
-          <h3 className="text-2xl font-bold text-slate-800 mb-2">Check your email</h3>
-          <p className="text-slate-500 leading-relaxed mb-6">
-            We've sent a confirmation link to <span className="font-bold text-slate-800">{email}</span>. Please verify your email to continue.
-          </p>
-          <div className="flex justify-center gap-2 items-center text-sm text-slate-400 font-medium">
-            <Loader2 className="w-4 h-4 animate-spin" />
-            Redirecting to login...
-          </div>
-        </Motion.div>
-      </div>
-    );
-  }
 
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col justify-center items-center p-4">
