@@ -1,6 +1,6 @@
 import { Outlet, Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { Star, LayoutDashboard, Settings, LogOut, User, Menu, X } from 'lucide-react';
+import { Star, LayoutDashboard, Settings, LogOut, User, Menu, X, BarChart3 } from 'lucide-react';
 import { useState } from 'react';
 import { motion as Motion, AnimatePresence } from 'framer-motion';
 
@@ -28,6 +28,7 @@ const Layout = () => {
 
         <nav className="flex-1 space-y-2">
           <NavLink to="/dashboard" icon={<LayoutDashboard size={18} strokeWidth={1.75} />} label="Dashboard" active={location.pathname === '/dashboard'} />
+          <NavLink to="/competitor" icon={<BarChart3 size={18} strokeWidth={1.75} />} label="Competitor Insight" active={location.pathname === '/competitor'} />
           <NavLink to="/settings" icon={<Settings size={18} strokeWidth={1.75} />} label="Settings" active={location.pathname === '/settings'} />
         </nav>
 
@@ -74,6 +75,7 @@ const Layout = () => {
           >
             <nav className="flex-1 space-y-4">
               <MobileNavLink to="/dashboard" icon={<LayoutDashboard size={24} strokeWidth={1.75} />} label="Dashboard" onClick={() => setIsMobileMenuOpen(false)} active={location.pathname === '/dashboard'} />
+              <MobileNavLink to="/competitor" icon={<BarChart3 size={24} strokeWidth={1.75} />} label="Competitor Insight" onClick={() => setIsMobileMenuOpen(false)} active={location.pathname === '/competitor'} />
               <MobileNavLink to="/settings" icon={<Settings size={24} strokeWidth={1.75} />} label="Settings" onClick={() => setIsMobileMenuOpen(false)} active={location.pathname === '/settings'} />
             </nav>
             <button 

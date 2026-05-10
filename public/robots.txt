@@ -1,6 +1,10 @@
-# https://www.robotstxt.org/robotstxt.html
 User-agent: *
 Allow: /
+Allow: /amazon-review-assistant
+Allow: /etsy-customer-service-ai
+Allow: /shopify-reputation-management
+Disallow: /dashboard
+Disallow: /settings
+Disallow: /competitor
 
-# Sitemaps
-Sitemap: https://reviewnetlify.netlify.app/sitemap.xml
+Sitemap: https://reviewreply-ai.com/sitemap.xml

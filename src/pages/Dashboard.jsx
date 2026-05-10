@@ -21,7 +21,7 @@ import {
 } from 'lucide-react';
 import { motion as Motion, AnimatePresence } from 'framer-motion';
 import { useNavigate, Link } from 'react-router-dom';
-import { generateReplies, analyzeReview } from '../utils/gemini';
+import { processReviewEnterprise } from '../lib/ai-engine';
 import { supabase } from '../lib/supabaseClient';
 import { useAuth } from '../context/AuthContext';
 
@@ -29,7 +29,7 @@ const Dashboard = () => {
   const { user, signOut } = useAuth();
   const navigate = useNavigate();
   const [reviewText, setReviewText] = useState("");
-  const [selectedTone, setSelectedTone] = useState('Auto');
+  const [selectedTone, setSelectedTone] = useState('Professional');
   const [selectedLanguage, setSelectedLanguage] = useState('English');
   const [isLangMenuOpen, setIsLangMenuOpen] = useState(false);
   const [replies, setReplies] = useState([]);
@@ -126,40 +126,41 @@ const Dashboard = () => {
     setIsLoading(true);
     setError('');
     try {
-      let finalTone = selectedTone;
-      
-      // GATE 4.1 — Sentiment Analysis for Auto-Tone
-      if (selectedTone === 'Auto') {
-        const analysis = await analyzeReview(reviewText);
-        if (analysis?.sentiment === 'positive') finalTone = 'Enthusiastic & Grateful';
-        else if (analysis?.sentiment === 'negative') finalTone = 'Apologetic & Professional';
-        else finalTone = 'Informative & Helpful';
-      }
+      // ENTERPRISE COGNITIVE LAYER — Multi-stage Analysis & Generation
+      const { analysis, replies: result, cta } = await processReviewEnterprise(
+        reviewText, 
+        selectedLanguage,
+        "Google", // Default platform
+        businessProfile
+      );
 
-      const result = await generateReplies(reviewText, finalTone, selectedLanguage, businessProfile);
-      setReplies(result);
+      // Append CTA if present
+      const finalReply = cta ? `${result[0]}\n\n${cta}` : result[0];
+      setReplies([finalReply]);
       
-      // GATE 5.1 — Reply Storage in reviews_history
+      // PERSISTENCE — Storing analysis metadata for Enterprise Audit
       await supabase.from('reviews_history').insert([{
         user_id: user.id,
         review_text: reviewText,
-        ai_reply: result[0], // Storing the primary suggestion
-        tone: finalTone,
-        language: selectedLanguage
+        ai_reply: finalReply,
+        tone: analysis.sentiment === 'Positive' ? 'Enthusiastic' : (analysis.sentiment === 'Negative' ? 'Empathetic' : 'Professional'),
+        language: selectedLanguage,
+        sentiment: analysis.sentiment,
+        issue_category: analysis.category
       }]);
 
       // Update Global Stats
       const { data: currentStats } = await supabase.from('global_stats').select('total_replies').eq('id', 1).single();
       await supabase.from('global_stats').update({ total_replies: (currentStats?.total_replies || 0) + 1 }).eq('id', 1);
       
-      // GATE 5.2 — Real-Time Feed Reflection
       fetchHistory();
       fetchUserStats();
       fetchGlobalStats();
       
       setTimeout(() => document.getElementById('results-section')?.scrollIntoView({ behavior: 'smooth' }), 100);
     } catch (err) {
-      setError("Failed to generate replies. Check your connection.");
+      console.error(err);
+      setError("AI Engine error. Check your API keys in .env 🔑");
     } finally {
       setIsLoading(false);
     }
@@ -194,7 +195,7 @@ const Dashboard = () => {
         <Motion.div 
           initial={{ opacity: 0, scale: 0.95 }}
           animate={{ opacity: 1, scale: 1 }}
-          className="flex items-center gap-4 py-3 px-5 bg-white border border-slate-200 rounded-[1.5rem] shadow-sm min-w-[280px]"
+          className="flex items-center gap-4 py-3 px-5 bg-white border border-slate-200 rounded-3xl shadow-sm min-w-[280px]"
         >
           <div className="w-12 h-12 bg-indigo-50 rounded-2xl flex items-center justify-center text-indigo-600">
             {isProfileLoading ? <Loader2 size={24} className="animate-spin" strokeWidth={1.75} /> : <Building2 size={24} strokeWidth={1.75} />}
@@ -247,7 +248,7 @@ const Dashboard = () => {
       <div className="grid lg:grid-cols-5 gap-10">
         <div className="lg:col-span-3 space-y-8">
           {/* Tool Card */}
-          <section className="bg-white p-8 rounded-[2rem] border border-slate-200 shadow-sm">
+          <section className="bg-white p-8 rounded-4xl border border-slate-200 shadow-sm">
             <div className="flex items-center gap-2 mb-6">
               <div className="w-8 h-8 rounded-full bg-indigo-50 text-indigo-600 flex items-center justify-center text-xs font-bold ring-4 ring-indigo-50/50">1</div>
               <span className="font-bold text-slate-900">Paste Customer Review</span>
@@ -256,7 +257,7 @@ const Dashboard = () => {
               value={reviewText}
               onChange={(e) => setReviewText(e.target.value)}
               placeholder="Paste a review here and watch the magic happen... ✨"
-              className="w-full h-48 px-6 py-5 bg-slate-50 border border-slate-200 rounded-[1.5rem] focus:ring-4 focus:ring-indigo-100 focus:border-indigo-600 focus:bg-white transition-all outline-none resize-none text-slate-900 font-medium placeholder:text-slate-400"
+              className="w-full h-48 px-6 py-5 bg-slate-50 border border-slate-200 rounded-3xl focus:ring-4 focus:ring-indigo-100 focus:border-indigo-600 focus:bg-white transition-all outline-none resize-none text-slate-900 font-medium placeholder:text-slate-400"
             />
             
             <div className="mt-8 space-y-6">
@@ -265,10 +266,10 @@ const Dashboard = () => {
                 <span className="font-bold text-slate-900">Select Tone & Language</span>
               </div>
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                <ToneOption icon={<Sparkles size={18} strokeWidth={1.75} />} label="Auto" active={selectedTone === 'Auto'} onClick={() => setSelectedTone('Auto')} />
+                <ToneOption icon={<Sparkles size={18} strokeWidth={1.75} />} label="Professional" active={selectedTone === 'Professional'} onClick={() => setSelectedTone('Professional')} />
                 <ToneOption icon={<Smile size={18} strokeWidth={1.75} />} label="Friendly" active={selectedTone === 'Friendly'} onClick={() => setSelectedTone('Friendly')} />
-                <ToneOption icon={<Briefcase size={18} strokeWidth={1.75} />} label="Professional" active={selectedTone === 'Professional'} onClick={() => setSelectedTone('Professional')} />
-                <ToneOption icon={<Heart size={18} strokeWidth={1.75} className="text-red-500" />} label="Apologetic" active={selectedTone === 'Apologetic'} onClick={() => setSelectedTone('Apologetic')} />
+                <ToneOption icon={<Zap size={18} strokeWidth={1.75} className="text-amber-500" />} label="Wit" active={selectedTone === 'Wit'} onClick={() => setSelectedTone('Wit')} />
+                <ToneOption icon={<Heart size={18} strokeWidth={1.75} className="text-purple-500" />} label="Gen-Z" active={selectedTone === 'Gen-Z'} onClick={() => setSelectedTone('Gen-Z')} />
               </div>
 
               {/* Language Selector */}
@@ -330,7 +331,7 @@ const Dashboard = () => {
                   <span className="w-2 h-6 bg-indigo-600 rounded-full" /> AI Results
                 </h3>
                 {replies.map((reply, idx) => (
-                  <div key={idx} className="bg-white p-8 rounded-[2rem] border border-slate-200 shadow-sm relative group overflow-hidden">
+                  <div key={idx} className="bg-white p-8 rounded-4xl border border-slate-200 shadow-sm relative group overflow-hidden">
                     <p className="text-slate-900 leading-relaxed font-medium mb-6">{reply}</p>
                     <div className="flex justify-between items-center">
                       <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{reply.split(' ').length} words</span>
@@ -352,7 +353,7 @@ const Dashboard = () => {
 
         {/* Sidebar History */}
         <div className="lg:col-span-2">
-          <div className="bg-white p-8 rounded-[2rem] border border-slate-200 shadow-sm h-full max-h-[900px] flex flex-col overflow-hidden">
+          <div className="bg-white p-8 rounded-4xl border border-slate-200 shadow-sm h-full max-h-[900px] flex flex-col overflow-hidden">
             <div className="flex items-center justify-between mb-8">
               <h3 className="text-xl font-bold text-slate-900 flex items-center gap-3">
                 <History size={20} className="text-slate-400" strokeWidth={1.75} /> Recent History
@@ -413,7 +414,7 @@ const Dashboard = () => {
 };
 
 const StatCard = ({ icon, label, value, unit = "", bg, color }) => (
-  <div className={`${bg} p-6 rounded-[2rem] border border-white shadow-sm flex items-center gap-5 transition-transform hover:scale-[1.02]`}>
+  <div className={`${bg} p-6 rounded-4xl border border-white shadow-sm flex items-center gap-5 transition-transform hover:scale-[1.02]`}>
     <div className="w-14 h-14 bg-white rounded-2xl flex items-center justify-center shadow-sm text-xl text-slate-900">{icon}</div>
     <div>
       <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">{label}</p>

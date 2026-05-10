@@ -2,10 +2,17 @@ import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-d
 import { AuthProvider, useAuth } from './context/AuthContext';
 import Auth from './pages/Auth';
 import Dashboard from './pages/Dashboard';
+import CompetitorInsight from './pages/CompetitorInsight';
 import Settings from './pages/Settings';
 import Layout from './components/Layout';
+import SEO from './components/SEO';
 import { Loader2 } from 'lucide-react';
 import './App.css';
+
+// Marketing Pages
+import AmazonLanding from './pages/marketing/AmazonLanding';
+import EtsyLanding from './pages/marketing/EtsyLanding';
+import ShopifyLanding from './pages/marketing/ShopifyLanding';
 
 // Protected Route Component
 const ProtectedRoute = ({ children }) => {
@@ -33,10 +40,16 @@ const RootRedirect = () => {
 function App() {
   return (
     <AuthProvider>
+      <SEO /> {/* Global default SEO */}
       <Router>
         <Routes>
           {/* Root Redirect */}
           <Route path="/" element={<RootRedirect />} />
+          
+          {/* Public Marketing Pages */}
+          <Route path="/amazon-review-assistant" element={<AmazonLanding />} />
+          <Route path="/etsy-customer-service-ai" element={<EtsyLanding />} />
+          <Route path="/shopify-reputation-management" element={<ShopifyLanding />} />
           
           {/* Unified Auth Route */}
           <Route path="/auth" element={<Auth />} />
@@ -46,6 +59,7 @@ function App() {
           {/* Protected Routes inside Layout */}
           <Route element={<ProtectedRoute><Layout /></ProtectedRoute>}>
             <Route path="/dashboard" element={<Dashboard />} />
+            <Route path="/competitor" element={<CompetitorInsight />} />
             <Route path="/settings" element={<Settings />} />
           </Route>
 
@@ -58,3 +72,4 @@ function App() {
 }
 
 export default App;
+

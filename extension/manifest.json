@@ -1,0 +1,59 @@
+{
+  "manifest_version": 3,
+  "name": "ReviewReply AI - One-Click Amazon & Etsy Assistant",
+  "short_name": "ReviewReply AI",
+  "version": "1.0.0",
+  "description": "Automate e-commerce replies with AI. One-click sentiment analysis and direct response injection for Amazon, Etsy, Daraz, and Shopify.",
+  "permissions": [
+    "sidePanel",
+    "storage",
+    "activeTab",
+    "scripting"
+  ],
+  "host_permissions": [
+    "https://*.amazon.com/*",
+    "https://*.amazon.co.uk/*",
+    "https://*.amazon.in/*",
+    "https://*.amazon.ae/*",
+    "https://*.amazon.ca/*",
+    "https://*.etsy.com/*",
+    "https://*.myshopify.com/*",
+    "https://*.daraz.pk/*",
+    "https://*.daraz.com.bd/*",
+    "https://*.daraz.com.np/*",
+    "https://*.daraz.lk/*"
+  ],
+  "background": {
+    "service_worker": "background.js",
+    "type": "module"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://*.amazon.com/*",
+        "https://*.amazon.co.uk/*",
+        "https://*.amazon.in/*",
+        "https://*.amazon.ae/*",
+        "https://*.amazon.ca/*",
+        "https://*.etsy.com/*",
+        "https://*.myshopify.com/*",
+        "https://*.daraz.pk/*",
+        "https://*.daraz.com.bd/*",
+        "https://*.daraz.com.np/*",
+        "https://*.daraz.lk/*"
+      ],
+      "js": ["contentScript.js"]
+    }
+  ],
+  "side_panel": {
+    "default_path": "sidepanel.html"
+  },
+  "action": {
+    "default_title": "Open ReviewReply AI"
+  },
+  "icons": {
+    "16": "icons/icon16.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  }
+}

@@ -56,7 +56,7 @@ const Auth = () => {
         layout
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
-        className="bg-white rounded-[2rem] p-8 max-w-md w-full shadow-sm border border-slate-200"
+        className="bg-white rounded-4xl p-8 max-w-md w-full shadow-sm border border-slate-200"
       >
         <div className="w-12 h-12 bg-indigo-50 rounded-2xl flex items-center justify-center mb-6">
           {isLogin ? (

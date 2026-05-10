@@ -1,0 +1,45 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Profile {
+  id            String   @id @default(uuid())
+  businessName  String?  @map("business_name")
+  managerName   String?  @map("manager_name")
+  category      String?
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  @@map("profiles")
+}
+
+model BusinessProfile {
+  id                  String   @id @default(uuid())
+  businessName        String?  @map("business_name")
+  industryType        String?  @map("industry_type")
+  businessDescription String?  @map("business_description")
+  preferredTone       String?  @map("preferred_tone")
+  createdAt           DateTime @default(now()) @map("created_at")
+  updatedAt           DateTime @updatedAt @map("updated_at")
+
+  @@map("business_profiles")
+}
+
+model Review {
+  id            BigInt   @id @default(autoincrement())
+  userId        String?  @map("user_id")
+  reviewText    String   @map("review_text")
+  aiReply       String   @map("ai_reply")
+  tone          String
+  language      String
+  sentiment     Float?   // Detected Sentiment Score (-1 to 1)
+  issueCategory String?  @map("issue_category") // Extracts specific keywords (e.g., "Food quality")
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  @@map("reviews_history")
+}
