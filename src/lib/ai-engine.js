@@ -1,18 +1,16 @@
-import { GoogleGenerativeAI } from '@google/generative-ai';
-
-const genAI = new GoogleGenerativeAI(import.meta.env.VITE_GEMINI_API_KEY || import.meta.env.VITE_GROQ_API_KEY);
-
 /**
- * Enterprise Reputation Management AI Engine
- * Uses Google Gemini for high-conversion, empathetic, and professional replies.
+ * Enterprise Reputation Management AI Engine (Groq/Llama Powered)
+ * Optimized for high-conversion, empathetic, and professional replies.
  */
 export const processReviewEnterprise = async (reviewText, language, platform = "Google", businessProfile = {}) => {
-  try {
-    const model = genAI.getGenerativeModel({ 
-      model: "gemini-2.0-flash",
-      generationConfig: { responseMimeType: "application/json" }
-    });
+  const apiKey = import.meta.env.VITE_GROQ_API_KEY;
+  const endpoint = "https://api.groq.com/openai/v1/chat/completions";
 
+  if (!apiKey) {
+    throw new Error("Groq API Key is missing. Please check your .env file.");
+  }
+
+  try {
     const prompt = `
       Act as an Expert E-commerce Reputation Manager. Your task is to analyze customer reviews and generate high-conversion, empathetic, and professional replies.
 
@@ -37,12 +35,12 @@ export const processReviewEnterprise = async (reviewText, language, platform = "
       Platform: "${platform}"
 
       ### OUTPUT FORMAT (STRICT JSON ONLY):
-      Return ONLY a valid JSON object.
+      Return ONLY a valid JSON object. Do not include prose, markdown code blocks, or conversational filler.
 
       {
         "analysis": {
           "sentiment": "Positive | Negative | Neutral",
-          "score": 0.0 to 1.0,
+          "score": 0.0,
           "primary_issue": "string (max 5 words)",
           "detected_language": "string"
         },
@@ -54,24 +52,44 @@ export const processReviewEnterprise = async (reviewText, language, platform = "
       }
     `;
 
-    const result = await model.generateContent(prompt);
-    const response = await result.response;
-    const data = JSON.parse(response.text());
+    const response = await fetch(endpoint, {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${apiKey}`,
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        model: "llama-3.3-70b-versatile",
+        messages: [
+          { role: "system", content: "You are a professional e-commerce reputation manager. Output ONLY valid JSON." },
+          { role: "user", content: prompt }
+        ],
+        response_format: { type: "json_object" },
+        temperature: 0.2
+      })
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json();
+      throw new Error(errorData.error?.message || "Groq API Request Failed");
+    }
+
+    const result = await response.json();
+    const data = JSON.parse(result.choices[0].message.content);
 
     return {
       analysis: {
         sentiment: data.analysis.sentiment,
         score: data.analysis.score,
-        category: data.analysis.primary_issue, // Map for backward compatibility if needed
+        category: data.analysis.primary_issue,
         language: data.analysis.detected_language
       },
-      replies: [data.response.generated_reply], // Return as array for compatibility
+      replies: [data.response.generated_reply],
       cta: data.response.call_to_action,
       fullResponse: data
     };
   } catch (error) {
-    console.error("AI Engine Error:", error);
+    console.error("AI Engine Error (Groq):", error);
     throw error;
   }
 };
-
