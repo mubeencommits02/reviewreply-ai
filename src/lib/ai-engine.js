@@ -27,7 +27,12 @@ export const processReviewEnterprise = async (reviewText, language, platform = "
       ### BUSINESS CONTEXT:
       - Business Name: ${businessProfile?.business_name || 'Our Business'}
       - Industry: ${businessProfile?.industry || 'Service/Retail'}
+      - Company Website: ${businessProfile?.website || 'Not Specified'}
       - USPs: ${businessProfile?.usps || 'Quality service and customer satisfaction'}
+
+      ### INTEGRATION RULES:
+      - Intelligently mention the Business Name and Company Website in the generated reply ONLY if it flows naturally, makes sense, and is highly professional.
+      - Never force the website if the customer review is negative or complaining (as it would look spammy or insensitive). In negative reviews, focus strictly on resolving their issue with sincere empathy.
 
       ### DATA INPUT:
       Review Text: "${reviewText}"
@@ -42,6 +47,7 @@ export const processReviewEnterprise = async (reviewText, language, platform = "
           "sentiment": "Positive | Negative | Neutral",
           "score": 0.0,
           "primary_issue": "string (max 5 words)",
+          "themes": ["theme1", "theme2", "theme3"],
           "detected_language": "string"
         },
         "response": {
@@ -82,6 +88,7 @@ export const processReviewEnterprise = async (reviewText, language, platform = "
         sentiment: data.analysis.sentiment,
         score: data.analysis.score,
         category: data.analysis.primary_issue,
+        themes: data.analysis.themes || [],
         language: data.analysis.detected_language
       },
       replies: [data.response.generated_reply],

@@ -6,8 +6,8 @@ const EtsyLanding = () => {
   return (
     <div className="bg-[#FFF9F5] min-h-screen">
       <SEO 
-        title="Etsy Review Automation - AI Replies for Handmade Shops"
-        description="Empathetic AI replies for your Etsy business. Automate customer service and boost shop trust with ReviewReply AI."
+        title="Etsy Review Assistant - Copy-Paste AI Replies"
+        description="Empathetic AI replies for your Etsy business. Copy-paste reviews and boost shop trust with ReviewReply AI."
       />
       
       <header className="py-20 px-6 max-w-7xl mx-auto text-center">
@@ -28,7 +28,7 @@ const EtsyLanding = () => {
             <h2 className="text-4xl font-bold text-slate-900 leading-tight">Why Etsy Sellers Love ReviewReply</h2>
             <div className="space-y-6">
               <EtsyBenefit icon={<Heart fill="#F1641E" color="#F1641E" />} title="Personalized for Makers" text="We inject your specific business story into every reply." />
-              <EtsyBenefit icon={<Sparkles className="text-amber-500" />} title="Magic Review Detection" text="The extension lives inside Etsy.com. No more switching tabs." />
+              <EtsyBenefit icon={<Sparkles className="text-amber-500" />} title="Instant Generation" text="Copy any review into our dashboard and get a perfect reply in 2 seconds." />
               <EtsyBenefit icon={<MessageCircle className="text-indigo-600" />} title="Multi-lingual Support" text="Reply to global customers in their native language fluently." />
             </div>
           </div>

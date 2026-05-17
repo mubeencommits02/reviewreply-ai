@@ -7,7 +7,7 @@ const AmazonLanding = () => {
     "@context": "https://schema.org",
     "@type": "SoftwareApplication",
     "name": "ReviewReply AI Amazon Assistant",
-    "operatingSystem": "Chrome",
+    "operatingSystem": "Web",
     "applicationCategory": "BusinessApplication",
     "offers": {
       "@type": "Offer",
@@ -19,8 +19,8 @@ const AmazonLanding = () => {
   return (
     <div className="bg-white min-h-screen">
       <SEO 
-        title="Amazon Review Assistant - Automate Seller Central Replies"
-        description="Save hours on Amazon Seller Central. Automate Amazon feedback and reviews with our AI-powered Chrome extension."
+        title="Amazon Review Assistant - Copy-Paste AI Replies"
+        description="Save hours on Amazon Seller Central. Copy-paste reviews and get AI-powered replies instantly for Amazon feedback and reviews."
         schema={schema}
       />
       
@@ -30,7 +30,7 @@ const AmazonLanding = () => {
           Master <span className="text-indigo-600">Amazon Seller</span> Reviews
         </h1>
         <p className="text-xl text-slate-600 mb-10 max-w-2xl mx-auto leading-relaxed">
-          Stop wasting hours on manual feedback. Automate your Amazon reputation management with one-click, high-conversion AI replies.
+          Stop wasting hours on manual feedback. Use our Copy-Paste AI Assistant to manage your Amazon reputation with high-conversion replies.
         </p>
         <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
           <Link to="/signup" className="px-8 py-4 bg-indigo-600 text-white rounded-2xl font-bold text-lg hover:bg-indigo-700 transition-all flex items-center gap-2">

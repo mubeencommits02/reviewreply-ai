@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { supabase } from '../lib/supabaseClient';
-import { Briefcase, Building2, AlignLeft, Check, Loader2, Save, ArrowLeft } from 'lucide-react';
+import { Briefcase, Building2, AlignLeft, Check, Loader2, Save, ArrowLeft, Globe } from 'lucide-react';
 import { motion as Motion, AnimatePresence } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
 
@@ -14,7 +14,8 @@ const Settings = () => {
   const [profile, setProfile] = useState({
     business_name: '',
     industry: '',
-    usps: ''
+    usps: '',
+    website: ''
   });
 
   useEffect(() => {
@@ -31,12 +32,23 @@ const Settings = () => {
         .maybeSingle();
       
       if (data) {
+        let website = data.website || '';
+        let usps = data.usps || data.business_description || '';
+        
+        // Parse embedded website fallback if stored in usps field
+        if (!website && usps.includes('[Website:')) {
+          const match = usps.match(/\[Website:\s*(.*?)\]/);
+          if (match) {
+            website = match[1];
+            usps = usps.replace(/\[Website:\s*.*?\]/, '').trim();
+          }
+        }
+
         setProfile({
           business_name: data.business_name || '',
-          // Support both industry and industry_type column names
           industry: data.industry || data.industry_type || '',
-          // Support both usps and business_description column names
-          usps: data.usps || data.business_description || ''
+          usps: usps,
+          website: website
         });
       }
     } catch (err) {
@@ -61,6 +73,7 @@ const Settings = () => {
         business_name: profile.business_name,
         industry: profile.industry,
         usps: profile.usps,
+        website: profile.website,
         updated_at: new Date().toISOString()
       };
 
@@ -69,37 +82,73 @@ const Settings = () => {
         business_name: profile.business_name,
         industry_type: profile.industry,
         business_description: profile.usps,
+        website: profile.website,
         updated_at: new Date().toISOString()
       };
 
-      // 3. Attempt sync with Modern Schema (industry/usps)
-      let { error } = await supabase
+      const fallbackModernPayload = {
+        ...modernPayload,
+        usps: `[Website: ${profile.website}] ${profile.usps}`
+      };
+      delete fallbackModernPayload.website;
+
+      const fallbackLegacyPayload = {
+        ...legacyPayload,
+        business_description: `[Website: ${profile.website}] ${profile.usps}`
+      };
+      delete fallbackLegacyPayload.website;
+
+      let error = null;
+
+      // 3. Attempt sync with Modern Schema and website column
+      const { error: primaryError } = await supabase
         .from('business_profiles')
         .upsert(modernPayload, { onConflict: 'id' });
+      error = primaryError;
       
-      // 4. Fallback: If 'column not found', try Legacy Schema (industry_type/business_description)
+      // Fallback: website column missing in modern schema -> embed in usps
       if (error && (error.message?.includes('column') || error.code === '42703')) {
-        console.warn("Modern schema failed, trying legacy schema...");
+        const { error: fallbackError } = await supabase
+          .from('business_profiles')
+          .upsert(fallbackModernPayload, { onConflict: 'id' });
+        error = fallbackError;
+      }
+
+      // Fallback: If 'column not found', try Legacy Schema with website column
+      if (error && (error.message?.includes('column') || error.code === '42703')) {
         const { error: legacyError } = await supabase
           .from('business_profiles')
           .upsert(legacyPayload, { onConflict: 'id' });
         error = legacyError;
+        
+        // Fallback: website column missing in legacy schema -> embed in business_description
+        if (error && (error.message?.includes('column') || error.code === '42703')) {
+          const { error: fallbackLegacyError } = await supabase
+            .from('business_profiles')
+            .upsert(fallbackLegacyPayload, { onConflict: 'id' });
+          error = fallbackLegacyError;
+        }
       }
 
       // 5. Secondary Fallback: If still failing, try user_id conflict instead of id
       if (error) {
-        console.warn("Retrying with user_id conflict...");
         const { error: retryError } = await supabase
           .from('business_profiles')
           .upsert(modernPayload, { onConflict: 'user_id' });
+        error = retryError;
         
-        if (retryError && (retryError.message?.includes('column') || retryError.code === '42703')) {
-          const { error: lastDitchError } = await supabase
+        if (error && (error.message?.includes('column') || error.code === '42703')) {
+          const { error: fallbackRetryError } = await supabase
             .from('business_profiles')
-            .upsert(legacyPayload, { onConflict: 'user_id' });
-          error = lastDitchError;
-        } else {
-          error = retryError;
+            .upsert(fallbackModernPayload, { onConflict: 'user_id' });
+          error = fallbackRetryError;
+          
+          if (error && (error.message?.includes('column') || error.code === '42703')) {
+            const { error: lastDitchError } = await supabase
+              .from('business_profiles')
+              .upsert(fallbackLegacyPayload, { onConflict: 'user_id' });
+            error = lastDitchError;
+          }
         }
       }
 
@@ -109,7 +158,8 @@ const Settings = () => {
       setProfile({
         business_name: profile.business_name,
         industry: profile.industry,
-        usps: profile.usps
+        usps: profile.usps,
+        website: profile.website
       });
 
       showToast("Settings synced successfully! ✨");
@@ -170,6 +220,14 @@ const Settings = () => {
               value={profile.industry}
               onChange={v => setProfile({...profile, industry: v})}
               placeholder="e.g. Hospitality / Bakery"
+            />
+
+            <InputGroup 
+              icon={<Globe size={18} strokeWidth={1.75} />} 
+              label="Company Website" 
+              value={profile.website}
+              onChange={v => setProfile({...profile, website: v})}
+              placeholder="e.g. https://joescoffeelab.com"
             />
 
             <div className="space-y-2">

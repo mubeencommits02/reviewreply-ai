@@ -50,10 +50,10 @@ const LandingPage = () => {
               <Zap className="w-3 h-3 fill-current" /> Trusted by 100+ local businesses
             </div>
             <h1 className="text-5xl md:text-7xl font-black tracking-tight mb-8 leading-[1.1]">
-              Human-Like <span className="text-blue-600">AI Replies</span> <br /> for Google Reviews
+              The #1 <span className="text-blue-600">Copy-Paste AI</span> <br /> Review Assistant
             </h1>
             <p className="text-xl md:text-2xl text-slate-500 mb-12 max-w-2xl mx-auto leading-relaxed">
-              Stop wasting 30 minutes daily. Let AI craft personal, context-aware replies that build customer loyalty instantly.
+              No complex setup. Just copy any review, paste it here, and get a professional, high-converting reply in seconds.
             </p>
             <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
               <button 

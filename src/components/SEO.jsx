@@ -6,7 +6,7 @@ import { useEffect } from 'react';
  */
 const SEO = ({ 
   title = "ReviewReply AI - Expert Reputation Management", 
-  description = "Automate e-commerce replies with AI. One-click sentiment analysis and direct response injection for Amazon, Etsy, Daraz, and Shopify.",
+  description = "The #1 Copy-Paste AI Assistant for e-commerce replies. Get professional, context-aware responses for Amazon, Etsy, Google, and Shopify reviews in seconds.",
   canonical = "https://reviewreply-ai.com",
   type = "website",
   image = "https://reviewreply-ai.com/og-image.png",
