@@ -151,9 +151,9 @@ const Dashboard = () => {
         businessProfile
       );
 
-      // Append CTA if present
-      const finalReply = cta ? `${result[0]}\n\n${cta}` : result[0];
-      setReplies([finalReply]);
+      // Generate all 3 variations and append CTA if present
+      const finalReplies = result.map(reply => cta ? `${reply}\n\n${cta}` : reply);
+      setReplies(finalReplies);
       
       // PERSISTENCE — Storing analysis metadata for Enterprise Audit
       // Clean, self-healing float mapping for the DB sentiment Float column to prevent crashes
@@ -164,12 +164,24 @@ const Dashboard = () => {
       await supabase.from('reviews_history').insert([{
         user_id: user.id,
         review_text: reviewText,
-        ai_reply: finalReply,
+        ai_reply: finalReplies[0],
         tone: selectedTone,
         language: selectedLanguage,
         sentiment: dbSentimentScore,
         issue_category: analysis.category || analysis.primary_issue || 'General Feedback'
       }]);
+
+      // Reactive real-time sentiment breakdown & history update locally
+      const newHistoryItem = {
+        created_at: new Date().toISOString(),
+        review_text: reviewText,
+        ai_reply: finalReplies[0],
+        tone: selectedTone,
+        language: selectedLanguage,
+        sentiment: dbSentimentScore,
+        issue_category: analysis.category || analysis.primary_issue || 'General Feedback'
+      };
+      setHistory(prev => [newHistoryItem, ...prev.slice(0, 9)]);
 
       // Update Global Stats
       const { data: currentStats } = await supabase.from('global_stats').select('total_replies').eq('id', 1).single();
@@ -467,7 +479,7 @@ const Dashboard = () => {
                   <Sparkles size={12} className="text-indigo-600" /> Switch Response Tone
                 </label>
                 <div className="flex flex-wrap items-center gap-1 bg-slate-50 p-1.5 border border-slate-200 rounded-2xl w-fit">
-                  {['Professional', 'Friendly', 'Wit', 'Gen-Z'].map(t => (
+                  {['Professional', 'Friendly', 'Apologetic'].map(t => (
                     <button
                       key={t}
                       onClick={() => setSelectedTone(t)}
@@ -541,7 +553,7 @@ const Dashboard = () => {
             {replies.length > 0 && (
               <Motion.div id="results-section" initial={{ opacity: 0, y: 30 }} animate={{ opacity: 1, y: 0 }} className="space-y-6">
                 <h3 className="text-xl font-bold text-slate-900 px-2 flex items-center gap-2">
-                  <span className="w-2 h-6 bg-indigo-600 rounded-full" /> Generated Reply
+                  <span className="w-2 h-6 bg-indigo-600 rounded-full" /> Generated Options (3 Variations)
                 </h3>
                 {replies.map((reply, idx) => (
                   <div key={idx} className="bg-white p-8 rounded-4xl border border-slate-200 shadow-sm relative group overflow-hidden">

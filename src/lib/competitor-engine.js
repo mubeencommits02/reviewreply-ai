@@ -37,8 +37,12 @@ export const analyzeCompetitor = async (competitorUrl) => {
       }
     `;
 
+    // Dynamic model selection: Use gpt-4o for OpenAI, llama-3.3-70b-versatile for Groq to prevent model 404 crashes
+    const isUsingGroq = !import.meta.env.VITE_OPENAI_API_KEY;
+    const modelName = isUsingGroq ? "llama-3.3-70b-versatile" : "gpt-4o";
+
     const response = await openai.chat.completions.create({
-      model: "gpt-4o",
+      model: modelName,
       messages: [{ role: "user", content: prompt }],
       response_format: { type: "json_object" }
     });
