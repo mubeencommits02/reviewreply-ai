@@ -44,6 +44,7 @@ const Dashboard = () => {
   const [isProfileLoading, setIsProfileLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
   const [activePlatform, setActivePlatform] = useState("Google");
+  const [expandedLogIndex, setExpandedLogIndex] = useState(null);
 
   const langRef = useRef(null);
 
@@ -731,10 +732,32 @@ const Dashboard = () => {
                   }
                 }
                 
+                const isExpanded = expandedLogIndex === idx;
                 return (
-                  <div key={idx} className="p-4 bg-slate-50 rounded-2xl border border-transparent hover:border-indigo-100 hover:bg-white transition-all group">
-                    <p className="text-xs text-slate-900 font-medium line-clamp-2 mb-3">"{item.review_text}"</p>
-                    <div className="flex flex-wrap items-center justify-between gap-2 border-t border-slate-200/50 pt-2">
+                  <div 
+                    key={idx} 
+                    onClick={() => setExpandedLogIndex(isExpanded ? null : idx)}
+                    className={`p-4 rounded-2xl border transition-all text-left cursor-pointer ${
+                      isExpanded 
+                        ? 'bg-white border-indigo-300 shadow-md ring-4 ring-indigo-50' 
+                        : 'bg-slate-50 border-transparent hover:border-indigo-100 hover:bg-white hover:shadow-sm'
+                    }`}
+                  >
+                    {!isExpanded ? (
+                      <p className="text-xs text-slate-900 font-medium line-clamp-2 mb-3">"{item.review_text}"</p>
+                    ) : (
+                      <div className="space-y-4 mb-4" onClick={e => e.stopPropagation()}>
+                        <div>
+                          <p className="text-[9px] font-black text-slate-400 uppercase tracking-wider font-mono">Original Review</p>
+                          <p className="text-xs text-slate-900 font-medium mt-0.5 leading-relaxed">"{item.review_text}"</p>
+                        </div>
+                        <div className="p-3 bg-indigo-50/50 border border-indigo-100/60 rounded-xl relative">
+                          <p className="text-[9px] font-black text-indigo-600 uppercase tracking-wider font-mono">Generated Reply</p>
+                          <p className="text-xs text-slate-700 font-medium mt-1.5 whitespace-pre-line leading-relaxed">{item.ai_reply}</p>
+                        </div>
+                      </div>
+                    )}
+                    <div className="flex flex-wrap items-center justify-between gap-2 border-t border-slate-200/50 pt-2" onClick={e => e.stopPropagation()}>
                       <div className="flex items-center gap-1.5">
                         <span className={`text-[8px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full border ${sBg}`}>
                           {sTag}
@@ -743,12 +766,20 @@ const Dashboard = () => {
                           {item.tone || 'Empathetic'}
                         </span>
                       </div>
-                      <button 
-                        onClick={() => handleCopy(item.ai_reply, `h-${idx}`)} 
-                        className="text-indigo-600 opacity-100 md:opacity-0 group-hover:opacity-100 transition-opacity font-black text-[9px] uppercase tracking-wider"
-                      >
-                        Copy Reply
-                      </button>
+                      <div className="flex items-center gap-3">
+                        <button 
+                          onClick={() => setExpandedLogIndex(isExpanded ? null : idx)}
+                          className="text-[9px] font-black uppercase tracking-wider text-slate-400 hover:text-slate-700"
+                        >
+                          {isExpanded ? 'Collapse' : 'Details'}
+                        </button>
+                        <button 
+                          onClick={() => handleCopy(item.ai_reply, `h-${idx}`)} 
+                          className="text-indigo-600 font-black text-[9px] uppercase tracking-wider"
+                        >
+                          Copy Reply
+                        </button>
+                      </div>
                     </div>
                   </div>
                 );
