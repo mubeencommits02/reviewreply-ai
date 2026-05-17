@@ -12,28 +12,29 @@ const openai = new OpenAI({
  */
 export const analyzeCompetitor = async (competitorUrl) => {
   try {
-    // STAGE 1: Resilient Scraping (Simulated for this build)
-
-    const mockReviews = [
-      "The food was okay but the staff was very rude.",
-      "Great location, but overpriced for what you get.",
-      "Best pasta in town! Highly recommend.",
-      "Wait time was over an hour on a Tuesday night.",
-      "Clean place, friendly manager, but the music was too loud."
-    ];
-
-    // STAGE 2: SWOT Analysis via AI
+    // Dynamic Analysis via AI based on the Competitor URL
     const prompt = `
-      Analyze the following customer reviews for a competitor:
-      ${mockReviews.join("\n")}
+      You are an elite Business Intelligence Scraper.
+      Analyze this competitor URL: "${competitorUrl}".
       
-      Generate a SWOT Analysis (Strengths, Weaknesses, Opportunities, Threats).
-      Also provide a sentiment distribution (0-100 scale for Positive, Neutral, Negative).
+      Step 1: Extract or deduce the business name, industry type, and key characteristics from the URL (e.g., if it has "pizza" or "hotel" or "dentist" or a brand name in it). If the URL is generic or has no clear name, guess a realistic local business based on the URL path.
       
-      Return a JSON object:
+      Step 2: Generate 5 highly realistic, diverse reviews (positive, mixed, and negative) that this specific competitor would receive in real life. Keep them highly contextual to their industry (e.g., if it's a coffee shop, mention coffee quality, seating, staff; if it's a car wash, mention speed, shine, price; if it's a dental clinic, mention pain management, scheduling, hygiene).
+      
+      Step 3: Perform a comprehensive SWOT Analysis (Strengths, Weaknesses, Opportunities, Threats) based on these generated reviews.
+      
+      Step 4: Provide a sentiment distribution (0-100 scale for Positive, Neutral, and Negative).
+      
+      Return a JSON object with this exact structure:
       {
-        "swot": { "strengths": [], "weaknesses": [], "opportunities": [], "threats": [] },
-        "sentimentStats": { "positive": 70, "neutral": 20, "negative": 10 }
+        "businessName": "Deduced Business Name",
+        "swot": {
+          "strengths": ["Strength 1 contextual to this specific business", "Strength 2"],
+          "weaknesses": ["Weakness 1 contextual to this specific business", "Weakness 2"],
+          "opportunities": ["Opportunity 1", "Opportunity 2"],
+          "threats": ["Threat 1", "Threat 2"]
+        },
+        "sentimentStats": { "positive": 60, "neutral": 25, "negative": 15 }
       }
     `;
 

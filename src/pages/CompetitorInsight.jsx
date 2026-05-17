@@ -54,28 +54,42 @@ const CompetitorInsight = () => {
         <Motion.div 
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
-          className="grid md:grid-cols-2 gap-8"
+          className="space-y-8"
         >
-          {/* SWOT Card */}
-          <div className="bg-white p-8 rounded-4xl border border-slate-200 shadow-sm space-y-6">
-            <h3 className="text-xl font-bold flex items-center gap-2">
-              <BarChart3 className="text-indigo-600" /> SWOT Analysis
-            </h3>
-            <div className="grid grid-cols-2 gap-4">
-              <SwotBox title="Strengths" items={data.swot.strengths} icon={<Shield className="text-emerald-500" />} bg="bg-emerald-50" />
-              <SwotBox title="Weaknesses" items={data.swot.weaknesses} icon={<AlertTriangle className="text-amber-500" />} bg="bg-amber-50" />
-              <SwotBox title="Opportunities" items={data.swot.opportunities} icon={<Target className="text-blue-500" />} bg="bg-blue-50" />
-              <SwotBox title="Threats" items={data.swot.threats} icon={<AlertTriangle className="text-red-500" />} bg="bg-red-50" />
-            </div>
+          {/* Target Brand Banner */}
+          <div className="bg-gradient-to-r from-slate-900 to-indigo-950 p-6 md:p-8 rounded-4xl border border-slate-800 text-white relative overflow-hidden group shadow-lg">
+            <div className="absolute top-0 right-0 w-64 h-64 bg-indigo-500/10 rounded-full blur-3xl pointer-events-none" />
+            <span className="text-[10px] font-black text-indigo-400 uppercase tracking-widest font-mono">Competitor Target Scoped</span>
+            <h2 className="text-2xl md:text-3xl font-black tracking-tight mt-1 mb-2 text-white">
+              🎯 {data.businessName || "Dynamic Profile Target"}
+            </h2>
+            <p className="text-slate-400 font-medium text-xs max-w-xl">
+              SWOT Analysis and Sentiment ratios generated on-demand by simulating contextual reviews mapped directly from URL indicators and industry signatures.
+            </p>
           </div>
 
-          {/* Sentiment Stats */}
-          <div className="bg-white p-8 rounded-4xl border border-slate-200 shadow-sm space-y-6">
-            <h3 className="text-xl font-bold">Sentiment Comparison</h3>
-            <div className="space-y-6">
-              <SentimentBar label="Positive" value={data.sentimentStats.positive} color="bg-emerald-500" />
-              <SentimentBar label="Neutral" value={data.sentimentStats.neutral} color="bg-slate-400" />
-              <SentimentBar label="Negative" value={data.sentimentStats.negative} color="bg-red-500" />
+          <div className="grid md:grid-cols-2 gap-8">
+            {/* SWOT Card */}
+            <div className="bg-white p-8 rounded-4xl border border-slate-200 shadow-sm space-y-6">
+              <h3 className="text-xl font-bold flex items-center gap-2 text-slate-900">
+                <BarChart3 className="text-indigo-600" /> SWOT Analysis
+              </h3>
+              <div className="grid grid-cols-2 gap-4">
+                <SwotBox title="Strengths" items={data.swot.strengths} icon={<Shield className="text-emerald-500" />} bg="bg-emerald-50" />
+                <SwotBox title="Weaknesses" items={data.swot.weaknesses} icon={<AlertTriangle className="text-amber-500" />} bg="bg-amber-50" />
+                <SwotBox title="Opportunities" items={data.swot.opportunities} icon={<Target className="text-blue-500" />} bg="bg-blue-50" />
+                <SwotBox title="Threats" items={data.swot.threats} icon={<AlertTriangle className="text-red-500" />} bg="bg-red-50" />
+              </div>
+            </div>
+
+            {/* Sentiment Stats */}
+            <div className="bg-white p-8 rounded-4xl border border-slate-200 shadow-sm space-y-6">
+              <h3 className="text-xl font-bold text-slate-900">Sentiment Comparison</h3>
+              <div className="space-y-6">
+                <SentimentBar label="Positive" value={data.sentimentStats.positive} color="bg-emerald-500" />
+                <SentimentBar label="Neutral" value={data.sentimentStats.neutral} color="bg-slate-400" />
+                <SentimentBar label="Negative" value={data.sentimentStats.negative} color="bg-red-500" />
+              </div>
             </div>
           </div>
         </Motion.div>
