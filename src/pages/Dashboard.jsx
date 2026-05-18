@@ -52,6 +52,7 @@ const Dashboard = () => {
     if (user) {
       initDashboard();
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user]);
 
   const initDashboard = async () => {
@@ -145,16 +146,17 @@ const Dashboard = () => {
     setError('');
     try {
       // ENTERPRISE COGNITIVE LAYER — Multi-stage Analysis & Generation
-      const { analysis, replies: result, cta } = await processReviewEnterprise(
+      const { analysis, replies: result, selectedTone: autoTone } = await processReviewEnterprise(
         reviewText, 
         selectedLanguage,
         activePlatform,
         businessProfile
       );
 
-      // Generate all 3 variations and append CTA if present
-      const finalReplies = result.map(reply => cta ? `${reply}\n\n${cta}` : reply);
-      setReplies(finalReplies);
+      setReplies(result);
+      if (autoTone) {
+        setSelectedTone(autoTone);
+      }
       
       // PERSISTENCE — Storing analysis metadata for Enterprise Audit
       // Clean, self-healing float mapping for the DB sentiment Float column to prevent crashes
@@ -165,8 +167,8 @@ const Dashboard = () => {
       await supabase.from('reviews_history').insert([{
         user_id: user.id,
         review_text: reviewText,
-        ai_reply: finalReplies[0],
-        tone: selectedTone,
+        ai_reply: result[0] || '',
+        tone: autoTone || 'Professional',
         language: selectedLanguage,
         sentiment: dbSentimentScore,
         issue_category: analysis.category || analysis.primary_issue || 'General Feedback'
@@ -176,8 +178,8 @@ const Dashboard = () => {
       const newHistoryItem = {
         created_at: new Date().toISOString(),
         review_text: reviewText,
-        ai_reply: finalReplies[0],
-        tone: selectedTone,
+        ai_reply: result[0] || '',
+        tone: autoTone || 'Professional',
         language: selectedLanguage,
         sentiment: dbSentimentScore,
         issue_category: analysis.category || analysis.primary_issue || 'General Feedback'
@@ -194,6 +196,7 @@ const Dashboard = () => {
       
       setTimeout(() => document.getElementById('results-section')?.scrollIntoView({ behavior: 'smooth' }), 100);
     } catch (err) {
+      console.error(err);
       setError("AI Engine error. Check your API keys in .env 🔑");
     } finally {
       setIsLoading(false);
@@ -411,7 +414,7 @@ const Dashboard = () => {
 
       {/* Analytics */}
       <div className="grid grid-cols-1 sm:grid-cols-4 gap-6">
-        <StatCard icon={<TrendingUp size={24} strokeWidth={1.75} />} label="Total Replies" value={300 + userStats.total} bg="bg-indigo-50" color="text-indigo-600" />
+        <StatCard icon={<TrendingUp size={24} strokeWidth={1.75} />} label="Total Replies" value={globalStats?.total_replies || (300 + userStats.total)} bg="bg-indigo-50" color="text-indigo-600" />
         <StatCard icon={<Clock size={24} strokeWidth={1.75} />} label="Hours Saved" value={roi.hoursSaved} unit="Hrs" bg="bg-emerald-50" color="text-emerald-600" />
         <StatCard icon={<Zap size={24} strokeWidth={1.75} />} label="This Month" value={124 + userStats.thisMonth} bg="bg-blue-50" color="text-blue-600" />
         <StatCard icon={<Globe size={24} strokeWidth={1.75} />} label="Businesses Helped" value={15 + userStats.total} bg="bg-amber-50" color="text-amber-600" />
@@ -477,24 +480,12 @@ const Dashboard = () => {
             {/* Sticky Options & Generate Area */}
             <div className="mt-8 pt-6 border-t border-slate-100 flex flex-col md:flex-row md:items-center justify-between gap-6">
               <div className="flex-1 space-y-2.5">
-                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-1.5 ml-1">
-                  <Sparkles size={12} className="text-indigo-600" /> Switch Response Tone
+                <label className="text-[10px] font-black text-indigo-600 uppercase tracking-widest flex items-center gap-1.5 ml-1 font-mono">
+                  <Sparkles size={12} className="text-indigo-600 animate-pulse" /> Sentiment Intelligence Enabled
                 </label>
-                <div className="flex flex-wrap items-center gap-1 bg-slate-50 p-1.5 border border-slate-200 rounded-2xl w-fit">
-                  {['Professional', 'Friendly', 'Apologetic'].map(t => (
-                    <button
-                      key={t}
-                      onClick={() => setSelectedTone(t)}
-                      className={`px-4 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all ${
-                        selectedTone === t 
-                          ? 'bg-indigo-600 text-white shadow-sm font-extrabold' 
-                          : 'text-slate-400 hover:text-slate-700 hover:bg-slate-100'
-                      }`}
-                    >
-                      {t}
-                    </button>
-                  ))}
-                </div>
+                <p className="text-xs text-slate-500 font-medium ml-1">
+                  System will automatically analyze sentiment and craft three tailored apologetic, friendly, or professional replies.
+                </p>
               </div>
               
               <div className="flex items-end gap-3 w-full md:w-auto">
@@ -554,9 +545,14 @@ const Dashboard = () => {
           <AnimatePresence mode="wait">
             {replies.length > 0 && (
               <Motion.div id="results-section" initial={{ opacity: 0, y: 30 }} animate={{ opacity: 1, y: 0 }} className="space-y-6">
-                <h3 className="text-xl font-bold text-slate-900 px-2 flex items-center gap-2">
-                  <span className="w-2 h-6 bg-indigo-600 rounded-full" /> Generated Options (3 Variations)
-                </h3>
+                <div className="flex items-center justify-between px-2 flex-wrap gap-3">
+                  <h3 className="text-xl font-bold text-slate-900 flex items-center gap-2">
+                    <span className="w-2 h-6 bg-indigo-600 rounded-full" /> Generated Options (3 Variations)
+                  </h3>
+                  <span className="text-[10px] font-black text-indigo-600 uppercase tracking-widest bg-indigo-50 border border-indigo-100/50 px-3 py-1.5 rounded-full font-mono animate-pulse">
+                    🤖 Auto-detected Tone: {selectedTone}
+                  </span>
+                </div>
                 {replies.map((reply, idx) => (
                   <div key={idx} className="bg-white p-8 rounded-4xl border border-slate-200 shadow-sm relative group overflow-hidden">
                     <div className="absolute top-0 left-0 w-1 h-full bg-indigo-500" />

@@ -12,17 +12,12 @@ export const processReviewEnterprise = async (reviewText, language, platform = "
 
   try {
     const prompt = `
-      Act as an Expert E-commerce Reputation Manager. Your task is to analyze customer reviews and generate high-conversion, empathetic, and professional replies.
+      Act as an Expert E-commerce Reputation Manager. Your task is to analyze customer reviews, auto-detect their sentiment, select the appropriate response tone, and generate exactly 3 distinct variations of the reply.
 
-      ### OBJECTIVE:
-      1. Perform deep sentiment analysis.
-      2. Extract the core "Pain Point" or "Value Driver."
-      3. Generate a contextual reply in the user's language.
-
-      ### ANALYSIS RULES:
-      - **Positive Sentiment**: Focus on gratitude and brand loyalty.
-      - **Negative Sentiment**: Acknowledge the specific issue, express genuine empathy, and offer a professional resolution.
-      - **Neutral Sentiment**: Acknowledge the feedback and ask for specific ways to improve.
+      ### TONEMAPPING RULES:
+      - If Sentiment is NEGATIVE -> Select tone "Apologetic". Tone style: empathetic, solution-oriented, take responsibility, acknowledge the issue, and offer assistance.
+      - If Sentiment is POSITIVE -> Select tone "Friendly". Tone style: enthusiastic, grateful, thank the customer, and reinforce their positive experience.
+      - If Sentiment is NEUTRAL -> Select tone "Professional". Tone style: polite, objective, helpful, clear, and concise.
 
       ### BUSINESS CONTEXT:
       - Business Name: ${businessProfile?.business_name || 'Our Business'}
@@ -31,8 +26,9 @@ export const processReviewEnterprise = async (reviewText, language, platform = "
       - USPs: ${businessProfile?.usps || 'Quality service and customer satisfaction'}
 
       ### INTEGRATION RULES:
-      - Intelligently mention the Business Name and Company Website in the generated reply ONLY if it flows naturally, makes sense, and is highly professional.
-      - Never force the website if the customer review is negative or complaining (as it would look spammy or insensitive). In negative reviews, focus strictly on resolving their issue with sincere empathy.
+      - Intelligently mention the Business Name and Company Website in the generated replies ONLY if it flows naturally, makes sense, and is highly professional.
+      - Never force the website if the customer review is negative or complaining (as it would look spammy or insensitive). In negative/apologetic reviews, focus strictly on resolving their issue with sincere empathy.
+      - Do not include any placeholders like "[Customer Name]" or "[Your Company]" in the replies. Generate complete, polished, ready-to-use responses.
 
       ### DATA INPUT:
       Review Text: "${reviewText}"
@@ -40,21 +36,16 @@ export const processReviewEnterprise = async (reviewText, language, platform = "
       Platform: "${platform}"
 
       ### OUTPUT FORMAT (STRICT JSON ONLY):
-      Return ONLY a valid JSON object. Do not include prose, markdown code blocks, or conversational filler.
+      Return ONLY a valid JSON object matching the following structure exactly. Do not include prose, markdown code blocks, or conversational filler.
 
       {
-        "analysis": {
-          "sentiment": "Positive | Negative | Neutral",
-          "score": 0.0,
-          "primary_issue": "string (max 5 words)",
-          "themes": ["theme1", "theme2", "theme3"],
-          "detected_language": "string"
-        },
-        "response": {
-          "tone": "Empathetic | Professional | Enthusiastic",
-          "generated_reply": "string",
-          "call_to_action": "string"
-        }
+        "detected_sentiment": "Positive | Negative | Neutral",
+        "selected_tone": "Friendly | Apologetic | Professional",
+        "replies": [
+          "Variation 1 text...",
+          "Variation 2 text...",
+          "Variation 3 text..."
+        ]
       }
     `;
 
@@ -67,7 +58,7 @@ export const processReviewEnterprise = async (reviewText, language, platform = "
       body: JSON.stringify({
         model: "llama-3.3-70b-versatile",
         messages: [
-          { role: "system", content: "You are a professional e-commerce reputation manager. Output ONLY valid JSON." },
+          { role: "system", content: "You are a professional e-commerce reputation manager. Output ONLY valid JSON matching the schema." },
           { role: "user", content: prompt }
         ],
         response_format: { type: "json_object" },
@@ -83,16 +74,20 @@ export const processReviewEnterprise = async (reviewText, language, platform = "
     const result = await response.json();
     const data = JSON.parse(result.choices[0].message.content);
 
+    let score = 0.0;
+    if (data.detected_sentiment === 'Positive') score = 1.0;
+    if (data.detected_sentiment === 'Negative') score = -1.0;
+
     return {
       analysis: {
-        sentiment: data.analysis.sentiment,
-        score: data.analysis.score,
-        category: data.analysis.primary_issue,
-        themes: data.analysis.themes || [],
-        language: data.analysis.detected_language
+        sentiment: data.detected_sentiment,
+        score: score,
+        category: 'General Feedback',
+        themes: [],
+        language: language
       },
-      replies: [data.response.generated_reply],
-      cta: data.response.call_to_action,
+      replies: data.replies || [],
+      selectedTone: data.selected_tone,
       fullResponse: data
     };
   } catch (error) {
