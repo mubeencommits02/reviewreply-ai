@@ -72,7 +72,10 @@ export const processReviewEnterprise = async (reviewText, language, platform = "
     }
 
     const result = await response.json();
-    const data = JSON.parse(result.choices[0].message.content);
+    const rawContent = result.choices[0]?.message?.content || "";
+    // Bulletproof Markdown backtick parser to prevent parse/crash failures
+    const cleanResponse = rawContent.replace(/```json|```/g, "").trim();
+    const data = JSON.parse(cleanResponse);
 
     let score = 0.0;
     if (data.detected_sentiment === 'Positive') score = 1.0;
