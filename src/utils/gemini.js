@@ -39,20 +39,29 @@ export const generateReplies = async (review, tone, language, businessProfile = 
   const industry = businessProfile?.industry || 'General';
   const usps = businessProfile?.usps || 'quality service and customer satisfaction';
 
-  const context = `You are a professional review response specialist for ${businessName}, a ${industry} business. Our key strengths are: ${usps}.`;
+  const prompt = `You are a professional review response specialist for ${businessName}, a ${industry} business. Our key strengths are: ${usps}.
 
-  const prompt = `${context}
-Write a ${tone} response to this review: "${review}"
-Generate exactly 3 different reply options.
-Generate all 3 replies strictly in the selected language only (${language}).
-Each reply must:
-- acknowledge specific details from the review
-- be personal and mention ${businessName} naturally or as a sign-off
-- highlight our strengths: ${usps}
-- be 50-80 words long
-- sound human and natural
-- end with an invitation to return.
-Return only the 3 replies numbered 1, 2, 3.`;
+Write a ${tone} response to this customer review: "${review}"
+
+You MUST generate EXACTLY 3 distinct reply variations. Each must:
+- Be meaningfully different in phrasing, structure, and length from the others.
+- Acknowledge specific details from the review.
+- Mention "${businessName}" naturally (as an opener or sign-off).
+- Highlight strengths: ${usps}.
+- Sound human and natural, end with an invitation to return.
+- Be written strictly in: ${language}.
+- Variation 1: Short (40-55 words).
+- Variation 2: Medium (60-80 words).
+- Variation 3: Detailed (85-110 words).
+
+Return ONLY a valid JSON object — no markdown, no prose:
+{
+  "replies": [
+    "Short reply here...",
+    "Medium reply here...",
+    "Detailed reply here..."
+  ]
+}`;
 
   const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
     method: 'POST',
@@ -62,9 +71,16 @@ Return only the 3 replies numbered 1, 2, 3.`;
     },
     body: JSON.stringify({
       model: 'llama-3.3-70b-versatile',
-      messages: [{ role: 'user', content: prompt }],
+      messages: [
+        {
+          role: 'system',
+          content: 'You are a professional review response specialist. Output ONLY valid JSON with a "replies" array containing EXACTLY 3 distinct string elements.'
+        },
+        { role: 'user', content: prompt }
+      ],
       temperature: 0.7,
-      max_tokens: 1000
+      max_tokens: 1500,
+      response_format: { type: 'json_object' }
     })
   });
 
@@ -74,7 +90,14 @@ Return only the 3 replies numbered 1, 2, 3.`;
   }
 
   const data = await response.json();
-  const text = data.choices[0].message.content;
-  const replies = text.split(/\d\.\s+/).filter(r => r.trim().length > 0);
-  return replies.slice(0, 3).map(r => r.trim());
+  const parsed = JSON.parse(data.choices[0].message.content);
+  const rawReplies = Array.isArray(parsed.replies)
+    ? parsed.replies.filter(r => typeof r === 'string' && r.trim().length > 0)
+    : [];
+
+  // Runtime guard: always return exactly 3 replies
+  while (rawReplies.length < 3) {
+    rawReplies.push(rawReplies[0] || 'Thank you for your review! We truly appreciate your feedback and look forward to serving you again.');
+  }
+  return rawReplies.slice(0, 3).map(r => r.trim());
 };
